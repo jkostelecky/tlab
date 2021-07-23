@@ -6,6 +6,12 @@ PROGRAM VBURGERS
   USE DNS_CONSTANTS
   USE DNS_GLOBAL
 
+  ! IBM
+  USE DNS_IBM
+#ifdef USE_MPI
+  USE DNS_MPI, ONLY: ims_pro
+#endif  
+
   IMPLICIT NONE
 
 #include "integers.h"
@@ -15,13 +21,33 @@ PROGRAM VBURGERS
   TREAL, DIMENSION(:,:),   ALLOCATABLE :: wrk1d, wrk2d
   TREAL, DIMENSION(:),     ALLOCATABLE :: wrk3d, tmp1
 
-  TINTEGER i, j, k,  bcs(2,2)
+  TINTEGER i, j, k,  bcs(2,2), itera
   TREAL dummy, error
+
+  ! IBM
+  LOGICAL,  PARAMETER :: ibm       = .TRUE.
+  TINTEGER, PARAMETER :: num_itera = 2 
+#ifdef USE_MPI 
+#else
+  TINTEGER, parameter :: ims_pro=0
+#endif
+  LOGICAL             :: ibm_allocated
 
 ! ###################################################################
   CALL DNS_START
 
   CALL DNS_READ_GLOBAL('dns.ini')
+  
+  ! IBM
+  IF (ibm) THEN
+    ! set flags and geometry (usually in dns.ini with dns_read_local.f90)
+    ! needs to be done befor MPI_INITIALIZE
+    imode_ibm     = 1
+    ibm_allocated = .FALSE.
+    xbars_geo(1)  = 4; xbars_geo(2) = g(2)%size; xbars_geo(3) = 10 ! xbars_geo(3)=[number,height,width]
+    ibm_burgers   = .TRUE.
+  END IF
+
 #ifdef USE_MPI
   CALL DNS_MPI_INITIALIZE
 #endif
@@ -39,6 +65,12 @@ PROGRAM VBURGERS
   ALLOCATE(wrk2d(isize_wrk2d,inb_wrk2d))
   ALLOCATE(a(imax,jmax,kmax),b(imax,jmax,kmax),c(imax,jmax,kmax))
   ALLOCATE(tmp1(isize_txc_field),wrk3d(isize_wrk3d))
+  
+  ! IBM
+  IF (ibm) THEN
+    CALL IBM_ALLOCATE(ibm_allocated)
+    CALL IBM_INITIALIZE_GEOMETRY(tmp1) ! tmp1 needed for transpose calls
+  END IF 
 
   CALL IO_READ_GRID(gfile, g(1)%size,g(2)%size,g(3)%size, g(1)%scale,g(2)%scale,g(3)%scale, x,y,z, area)
   CALL FDM_INITIALIZE(x, g(1), wrk1d)
@@ -52,92 +84,102 @@ PROGRAM VBURGERS
 ! ###################################################################
 ! Define forcing term
 ! ###################################################################
-  CALL DNS_READ_FIELDS('field.inp', i1, imax,jmax,kmax, i1,i0, isize_wrk3d, a, wrk3d)
+  CALL DNS_READ_FIELDS('flow.0', i1, imax,jmax,kmax, i1,i0, isize_wrk3d, a, wrk3d)
 
 ! ###################################################################
-  CALL OPR_PARTIAL_X(OPR_P2_P1, imax,jmax,kmax, bcs, g(1), a,b, c, wrk2d,wrk3d)
-  DO k = 1,kmax
-     DO j = 1,jmax
-        DO i = 1,imax
-!           b(i,j,k) = b(i,j,k) *visc - a(i,j,k) *c(i,j,k)
-           b(i,j,k) = b(i,j,k) *visc *ribackground(j)- a(i,j,k) *c(i,j,k)
-        ENDDO
-     ENDDO
-  ENDDO
 
-  CALL OPR_BURGERS_X(i0,i0, imax,jmax,kmax, bcs, g(1), a,a,a, c, tmp1, wrk2d,wrk3d)
-  c = c -b
+  IF (ims_pro == 0) WRITE(*,*) '============ENTER BURGERS ROUTINES======================='
 
-  error = C_0_R
-  dummy = C_0_R
-  DO k = 1,kmax
-     DO j = 1,jmax
-        DO i = 1,imax
-           error = error + c(i,j,k)*c(i,j,k)
-           dummy = dummy + b(i,j,k)*b(i,j,k)
-        ENDDO
-     ENDDO
-  ENDDO
-  WRITE(*,*) 'Relative error .............: ', sqrt(error)/sqrt(dummy)
-!  CALL DNS_WRITE_FIELDS('field.dif', i1, imax,jmax,kmax, i1, isize_wrk3d, e, wrk3d)
+  DO itera = 1, num_itera
 
-! ###################################################################
-  CALL OPR_PARTIAL_Y(OPR_P2_P1, imax,jmax,kmax, bcs, g(2), a,b, c, wrk2d,wrk3d)
-  DO k = 1,kmax
-     DO j = 1,jmax
-        DO i = 1,imax
-!           b(i,j,k) = b(i,j,k) *visc - a(i,j,k) *c(i,j,k)
-           b(i,j,k) = b(i,j,k) *visc *ribackground(j)- a(i,j,k) *c(i,j,k)
-        ENDDO
-     ENDDO
-  ENDDO
+      CALL OPR_PARTIAL_X(OPR_P2_P1, imax,jmax,kmax, bcs, g(1), a,b, c, wrk2d,wrk3d)
+      DO k = 1,kmax
+         DO j = 1,jmax
+            DO i = 1,imax
+      !           b(i,j,k) = b(i,j,k) *visc - a(i,j,k) *c(i,j,k)
+               b(i,j,k) = b(i,j,k) *visc *ribackground(j)- a(i,j,k) *c(i,j,k)
+            ENDDO
+         ENDDO
+      ENDDO
 
-  CALL OPR_BURGERS_Y(i0,i0, imax,jmax,kmax, bcs, g(2), a,a,a, c, tmp1, wrk2d,wrk3d)
-  c = c -b
+      CALL OPR_BURGERS_X(i0,i0, imax,jmax,kmax, bcs, g(1), a,a,a, c, tmp1, wrk2d,wrk3d)
+      c = c -b
 
-  error = C_0_R
-  dummy = C_0_R
-  DO k = 1,kmax
-     DO j = 1,jmax
-        DO i = 1,imax
-           error = error + c(i,j,k)*c(i,j,k)
-           dummy = dummy + b(i,j,k)*b(i,j,k)
-        ENDDO
-     ENDDO
-  ENDDO
-  WRITE(*,*) 'Relative error .............: ', sqrt(error)/sqrt(dummy)
-!  CALL DNS_WRITE_FIELDS('field.dif', i1, imax,jmax,kmax, i1, isize_wrk3d, c, wrk3d)
+      error = C_0_R
+      dummy = C_0_R
+      DO k = 1,kmax
+         DO j = 1,jmax
+            DO i = 1,imax
+               error = error + c(i,j,k)*c(i,j,k)
+               dummy = dummy + b(i,j,k)*b(i,j,k)
+            ENDDO
+         ENDDO
+      ENDDO
+      IF (ims_pro == 0) WRITE(*,*) 'Relative error .............: ', sqrt(error)/sqrt(dummy)
+      !  CALL DNS_WRITE_FIELDS('field.dif', i1, imax,jmax,kmax, i1, isize_wrk3d, e, wrk3d)
 
-! ###################################################################
-  IF ( g(3)%size .GT. 1 ) THEN
+      ! ###################################################################
+      CALL OPR_PARTIAL_Y(OPR_P2_P1, imax,jmax,kmax, bcs, g(2), a,b, c, wrk2d,wrk3d)
+      DO k = 1,kmax
+         DO j = 1,jmax
+            DO i = 1,imax
+      !           b(i,j,k) = b(i,j,k) *visc - a(i,j,k) *c(i,j,k)
+               b(i,j,k) = b(i,j,k) *visc *ribackground(j)- a(i,j,k) *c(i,j,k)
+            ENDDO
+         ENDDO
+      ENDDO
 
-  CALL OPR_PARTIAL_Z(OPR_P2_P1, imax,jmax,kmax, bcs, g(3), a,b, c, wrk2d,wrk3d)
-  DO k = 1,kmax
-     DO j = 1,jmax
-        DO i = 1,imax
-!           b(i,j,k) = b(i,j,k) *visc - a(i,j,k) *c(i,j,k)
-           b(i,j,k) = b(i,j,k) *visc *ribackground(j)- a(i,j,k) *c(i,j,k)
-        ENDDO
-     ENDDO
-  ENDDO
+      CALL OPR_BURGERS_Y(i0,i0, imax,jmax,kmax, bcs, g(2), a,a,a, c, tmp1, wrk2d,wrk3d)
+      c = c -b
 
-  CALL OPR_BURGERS_Z(i0,i0, imax,jmax,kmax, bcs, g(3), a,a,a, c, tmp1, wrk2d,wrk3d)
-  c = c -b
+      error = C_0_R
+      dummy = C_0_R
+      DO k = 1,kmax
+         DO j = 1,jmax
+            DO i = 1,imax
+               error = error + c(i,j,k)*c(i,j,k)
+               dummy = dummy + b(i,j,k)*b(i,j,k)
+            ENDDO
+         ENDDO
+      ENDDO
+      IF (ims_pro == 0) WRITE(*,*) 'Relative error .............: ', sqrt(error)/sqrt(dummy)
+      !  CALL DNS_WRITE_FIELDS('field.dif', i1, imax,jmax,kmax, i1, isize_wrk3d, c, wrk3d)
 
-  error = C_0_R
-  dummy = C_0_R
-  DO k = 1,kmax
-     DO j = 1,jmax
-        DO i = 1,imax
-           error = error + c(i,j,k)*c(i,j,k)
-           dummy = dummy + b(i,j,k)*b(i,j,k)
-        ENDDO
-     ENDDO
-  ENDDO
-  WRITE(*,*) 'Relative error .............: ', sqrt(error)/sqrt(dummy)
-!  CALL DNS_WRITE_FIELDS('field.dif', i1, imax,jmax,kmax, i1, isize_wrk3d, e, wrk3d)
+      ! ###################################################################
+      IF ( g(3)%size .GT. 1 ) THEN
 
-  END IF
+         CALL OPR_PARTIAL_Z(OPR_P2_P1, imax,jmax,kmax, bcs, g(3), a,b, c, wrk2d,wrk3d)
+         DO k = 1,kmax
+            DO j = 1,jmax
+               DO i = 1,imax
+         !           b(i,j,k) = b(i,j,k) *visc - a(i,j,k) *c(i,j,k)
+                  b(i,j,k) = b(i,j,k) *visc *ribackground(j)- a(i,j,k) *c(i,j,k)
+               ENDDO
+            ENDDO
+         ENDDO
+
+         CALL OPR_BURGERS_Z(i0,i0, imax,jmax,kmax, bcs, g(3), a,a,a, c, tmp1, wrk2d,wrk3d)
+         c = c -b
+
+         error = C_0_R
+         dummy = C_0_R
+         DO k = 1,kmax
+            DO j = 1,jmax
+               DO i = 1,imax
+                  error = error + c(i,j,k)*c(i,j,k)
+                  dummy = dummy + b(i,j,k)*b(i,j,k)
+               ENDDO
+            ENDDO
+         ENDDO
+         IF (ims_pro == 0) WRITE(*,*) 'Relative error .............: ', sqrt(error)/sqrt(dummy)
+         !  CALL DNS_WRITE_FIELDS('field.dif', i1, imax,jmax,kmax, i1, isize_wrk3d, e, wrk3d)
+
+      END IF
+
+      IF (ims_pro == 0) WRITE(*,*) '========================================================='
+
+   END DO
 
   CALL DNS_STOP(0)
+
 END PROGRAM VBURGERS

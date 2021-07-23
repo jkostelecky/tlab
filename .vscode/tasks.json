@@ -158,7 +158,7 @@
       {
         "label": "create_links_parallel",
         "type": "shell",
-        "command": "cd test_parallel && ln -s ../test_files/dns.ini dns.ini && ln -s ../build_parallel/inigrid.x inigrid.x && ln -s ../build_parallel/inirand.x inirand.x  && ln -s ../build_parallel/iniscal.x iniscal.x   && ln -s ../build_parallel/iniflow.x iniflow.x && ln -s ../build_parallel/dns.x dns.x"
+        "command": "cd test_parallel && ln -s ../build_parallel/vburgers.x vburgers.x && ln -s ../test_files/dns.ini dns.ini && ln -s ../build_parallel/inigrid.x inigrid.x && ln -s ../build_parallel/inirand.x inirand.x  && ln -s ../build_parallel/iniscal.x iniscal.x   && ln -s ../build_parallel/iniflow.x iniflow.x && ln -s ../build_parallel/dns.x dns.x"
       },
       {
         "label": "run_ini_parallel",

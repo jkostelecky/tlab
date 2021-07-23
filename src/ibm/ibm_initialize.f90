@@ -31,7 +31,7 @@
 !#
 !########################################################################
 
-subroutine IBM_INITIALIZE_GEOMETRY(txc, wrk3d)  
+subroutine IBM_INITIALIZE_GEOMETRY(txc)  
   
   use DNS_IBM
   
@@ -41,18 +41,18 @@ subroutine IBM_INITIALIZE_GEOMETRY(txc, wrk3d)
 #include "mpif.h"
 #endif 
   
-  TREAL, dimension(*), intent(inout) :: txc, wrk3d
+  TREAL, dimension(*), intent(inout) :: txc
 
   ! ================================================================== !
 
   ! generate native 3d-geometry field (eps_aux) of immersed objects (define your own geomtry here)
-  call IBM_GENERATE_GEOMETRY_XBARS(wrk3d) 
+  call IBM_GENERATE_GEOMETRY_XBARS() 
 
   ! transpose eps in epsi, epsj, epsk and allocate neccessary memory
-  call IBM_GEOMETRY_TRANSPOSE(wrk3d,txc)
+  call IBM_GEOMETRY_TRANSPOSE(txc)
 
   ! generate relevant geometry fields for IBM routines (nobi, nobj, nobk)
-  call IBM_GENERATE_GEOMETRY(wrk3d,txc) ! txc for DEBUG
+  call IBM_GENERATE_GEOMETRY() ! txc for DEBUG
   
   ! not coded yet
   ! read/write geometry fields from/to disk

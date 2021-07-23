@@ -33,7 +33,7 @@
 !#
 !########################################################################
 
-subroutine IBM_GENERATE_GEOMETRY_XBARS(wrk3d)
+subroutine IBM_GENERATE_GEOMETRY_XBARS()
 
   use DNS_IBM
   use DNS_GLOBAL, only: g
@@ -65,8 +65,8 @@ subroutine IBM_GENERATE_GEOMETRY_XBARS(wrk3d)
   TINTEGER                                     :: i,j,k,l
 
   ! DEBUG 
-  character(32)                                :: fname
-  TREAL, dimension(isize_field), intent(inout) :: wrk3d
+  ! character(32)                                :: fname
+  ! TREAL, dimension(isize_field), intent(inout) :: wrk3d
 
   ! ================================================================== !
 
@@ -121,14 +121,14 @@ subroutine IBM_GENERATE_GEOMETRY_XBARS(wrk3d)
   ! reshape 3D-eps_aux field into 1D-eps
   eps = reshape(eps_aux,(/isize_field/))
 
-  ! write eps field
-  write(fname,*) i0; 
-  fname = trim(adjustl('eps'))//trim(adjustl(fname))
-  if (ims_pro == 0) then
-    write(*,*) '======== Write eps field ================================'
-    write(*,*) fname ! DEBUG
-  end if
-  call DNS_WRITE_FIELDS(fname, i2, imax,jmax,kmax, i1, imax*jmax*kmax, eps, wrk3d)
+  ! ! write eps field
+  ! write(fname,*) i0; 
+  ! fname = trim(adjustl('eps'))//trim(adjustl(fname))
+  ! if (ims_pro == 0) then
+  !   write(*,*) '======== Write eps field ================================'
+  !   write(*,*) fname ! DEBUG
+  ! end if
+  ! call DNS_WRITE_FIELDS(fname, i2, imax,jmax,kmax, i1, imax*jmax*kmax, eps, wrk3d)
 
   return
 end subroutine IBM_GENERATE_GEOMETRY_XBARS

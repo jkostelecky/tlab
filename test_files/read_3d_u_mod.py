@@ -19,18 +19,18 @@ flow = mp.Field(path,var='flow',index=index)
 flow.read_3d_field()
 
 # u_mod field 
-f = open(path +'u_mod.1','rb')
+f = open(path +'fld_mod.1','rb')
 f.seek(52,0)
 u_mod = np.fromfile(f, np.dtype('<f8'), grid.nx*grid.ny*grid.nz)
 u_mod = u_mod.reshape((grid.nx,grid.ny,grid.nz),order='F')
 f.close()
 
-# read eps field
-f = open(path +'eps0.1','rb')
-f.seek(52,0)
-eps = np.fromfile(f, np.dtype('<f8'), grid.nx*grid.ny*grid.nz)
-eps = eps.reshape((grid.nx,grid.ny,grid.nz),order='F')
-f.close()
+# # read eps field
+# f = open(path +'eps0.1','rb')
+# f.seek(52,0)
+# eps = np.fromfile(f, np.dtype('<f8'), grid.nx*grid.ny*grid.nz)
+# eps = eps.reshape((grid.nx,grid.ny,grid.nz),order='F')
+# f.close()
 
 # sys.exit()
 
@@ -85,11 +85,11 @@ for i in range(0,10):
 plt.legend(loc=1)
 plt.show()
 
-# small check 
-w     = flow.w * (1. - eps)
-w_mod = u_mod  * (1. - eps)
-res   = w - w_mod
-print(str(res.sum()))
+# # small check 
+# w     = flow.w * (1. - eps)
+# w_mod = u_mod  * (1. - eps)
+# res   = w - w_mod
+# print(str(res.sum()))
 
 sys.exit()
 

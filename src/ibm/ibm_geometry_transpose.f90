@@ -32,7 +32,7 @@
 !#
 !########################################################################
 
-subroutine IBM_GEOMETRY_TRANSPOSE(wrk3d,txc)
+subroutine IBM_GEOMETRY_TRANSPOSE(tmp1)
   
   use DNS_IBM
   use DNS_GLOBAL, only: g
@@ -60,9 +60,10 @@ subroutine IBM_GEOMETRY_TRANSPOSE(wrk3d,txc)
   TINTEGER, parameter                                  :: ims_pro = 0         
 #endif
 
-  TREAL, dimension(isize_field,inb_txc), intent(inout) :: txc 
-  TREAL, dimension(isize_field)                        :: tmp1 
-  TREAL, dimension(isize_field),         intent(inout) :: wrk3d ! debug 
+  TREAL, dimension(isize_field), intent(inout) :: tmp1 
+  ! TREAL, dimension(isize_field,inb_txc), intent(inout) :: txc 
+  ! TREAL, dimension(isize_field)                        :: tmp1 
+  ! TREAL, dimension(isize_field),         intent(inout) :: wrk3d ! debug 
 
   TINTEGER                                             :: nyz, nxy
 
@@ -72,7 +73,7 @@ subroutine IBM_GEOMETRY_TRANSPOSE(wrk3d,txc)
   ! ================================================================== !
   
   ! tmp aux 
-  tmp1(:) = txc(:,1)
+  ! tmp1(:) = txc(:,1)
 
   ! npages for dns_transpose function (cf. dns_mpi_initialize.f90)
 #ifdef USE_MPI
