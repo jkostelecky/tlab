@@ -17,21 +17,32 @@ PROGRAM VBURGERS
 #include "integers.h"
 
   TREAL, DIMENSION(:,:),   ALLOCATABLE, SAVE, TARGET :: x,y,z
-  TREAL, DIMENSION(:,:,:), ALLOCATABLE :: a, b, c
-  TREAL, DIMENSION(:,:),   ALLOCATABLE :: wrk1d, wrk2d
-  TREAL, DIMENSION(:),     ALLOCATABLE :: wrk3d, tmp1
+  TREAL, DIMENSION(:,:,:), ALLOCATABLE               :: a, b, c
+  TREAL, DIMENSION(:,:),   ALLOCATABLE               :: wrk1d, wrk2d
+  TREAL, DIMENSION(:),     ALLOCATABLE               :: wrk3d, tmp1
 
-  TINTEGER i, j, k,  bcs(2,2), itera
-  TREAL dummy, error
+  TINTEGER                                           :: i, j, k,  bcs(2,2), itera
+  TREAL                                              :: dummy, error
 
   ! IBM
-  LOGICAL,  PARAMETER :: ibm       = .TRUE.
-  TINTEGER, PARAMETER :: num_itera = 2 
+  LOGICAL,  PARAMETER                                :: ibm           = .TRUE.
+  LOGICAL                                            :: ibm_allocated
+  
+  ! time messurement
+  TINTEGER                                           :: iter 
+  TINTEGER, parameter                                :: num_iter = 100
+#ifdef USE_MPI
+#include "mpif.h"
+  TREAL                                              :: t_start, t_end 
+#else
+  TINTEGER                                           :: c1, c2, c3, c11, c22, c33  
+#endif
+
+  ! IBM
 #ifdef USE_MPI 
 #else
-  TINTEGER, parameter :: ims_pro=0
+  TINTEGER, PARAMETER                                :: ims_pro       = 0
 #endif
-  LOGICAL             :: ibm_allocated
 
 ! ###################################################################
   CALL DNS_START
@@ -40,12 +51,10 @@ PROGRAM VBURGERS
   
   ! IBM
   IF (ibm) THEN
-    ! set flags and geometry (usually in dns.ini with dns_read_local.f90)
-    ! needs to be done befor MPI_INITIALIZE
-    imode_ibm     = 1
-    ibm_allocated = .FALSE.
-    xbars_geo(1)  = 4; xbars_geo(2) = g(2)%size; xbars_geo(3) = 10 ! xbars_geo(3)=[number,height,width]
-    ibm_burgers   = .TRUE.
+    imode_ibm     = 1                                              ! IBM on
+    ibm_allocated = .FALSE.                                        ! not allocated yet
+    xbars_geo(1)  = 4; xbars_geo(2) = g(2)%size; xbars_geo(3) = 10 ! geometry description: xbars_geo(3)=[number,height,width]
+    ibm_burgers   = .TRUE.                                         ! use IBM in burgers routines
   END IF
 
 #ifdef USE_MPI
@@ -89,9 +98,17 @@ PROGRAM VBURGERS
 ! ###################################################################
 
   IF (ims_pro == 0) WRITE(*,*) '============ENTER BURGERS ROUTINES======================='
+  IF (ims_pro == 0) WRITE(*,*) 'Number of Iterations: ', num_iter
 
-  DO itera = 1, num_itera
+#ifdef USE_MPI
+  t_start = MPI_WTIME()
+#else
+  call system_clock(c1,c2,c3)
+#endif
 
+  DO iter = 1, num_iter
+
+      ! ###################################################################
       CALL OPR_PARTIAL_X(OPR_P2_P1, imax,jmax,kmax, bcs, g(1), a,b, c, wrk2d,wrk3d)
       DO k = 1,kmax
          DO j = 1,jmax
@@ -115,7 +132,7 @@ PROGRAM VBURGERS
             ENDDO
          ENDDO
       ENDDO
-      IF (ims_pro == 0) WRITE(*,*) 'Relative error .............: ', sqrt(error)/sqrt(dummy)
+      ! IF (ims_pro == 0) WRITE(*,*) 'Relative error .............: ', sqrt(error)/sqrt(dummy)
       !  CALL DNS_WRITE_FIELDS('field.dif', i1, imax,jmax,kmax, i1, isize_wrk3d, e, wrk3d)
 
       ! ###################################################################
@@ -142,7 +159,7 @@ PROGRAM VBURGERS
             ENDDO
          ENDDO
       ENDDO
-      IF (ims_pro == 0) WRITE(*,*) 'Relative error .............: ', sqrt(error)/sqrt(dummy)
+      ! IF (ims_pro == 0) WRITE(*,*) 'Relative error .............: ', sqrt(error)/sqrt(dummy)
       !  CALL DNS_WRITE_FIELDS('field.dif', i1, imax,jmax,kmax, i1, isize_wrk3d, c, wrk3d)
 
       ! ###################################################################
@@ -171,14 +188,21 @@ PROGRAM VBURGERS
                ENDDO
             ENDDO
          ENDDO
-         IF (ims_pro == 0) WRITE(*,*) 'Relative error .............: ', sqrt(error)/sqrt(dummy)
+         ! IF (ims_pro == 0) WRITE(*,*) 'Relative error .............: ', sqrt(error)/sqrt(dummy)
          !  CALL DNS_WRITE_FIELDS('field.dif', i1, imax,jmax,kmax, i1, isize_wrk3d, e, wrk3d)
-
       END IF
 
-      IF (ims_pro == 0) WRITE(*,*) '========================================================='
+  END DO
 
-   END DO
+#ifdef USE_MPI
+  t_end = MPI_WTIME()
+  write(*,30) ims_pro, t_end - t_start
+  30 format(1X, 'MPI_Task: ', I5, '      delta_t (ms) : ', f7.4) 
+#else
+  call system_clock(c11,c22,c33)
+  write(*,30) ims_pro, c11 - c1 
+  30 format(1X, 'MPI_Task: ', I5, '      delta_t (ms) : ', I4) 
+#endif
 
   CALL DNS_STOP(0)
 
