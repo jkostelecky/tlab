@@ -53,6 +53,7 @@ PROGRAM VBURGERS
   IF (ibm) THEN
     imode_ibm     = 1                                              ! IBM on
     ibm_allocated = .FALSE.                                        ! not allocated yet
+   !  xbars_geo(1)  = 4; xbars_geo(2) = g(2)%size; xbars_geo(3) = 10 ! geometry description: xbars_geo(3)=[number,height,width]
     xbars_geo(1)  = 4; xbars_geo(2) = g(2)%size; xbars_geo(3) = 10 ! geometry description: xbars_geo(3)=[number,height,width]
     ibm_burgers   = .TRUE.                                         ! use IBM in burgers routines
   END IF
@@ -197,7 +198,7 @@ PROGRAM VBURGERS
 #ifdef USE_MPI
   t_end = MPI_WTIME()
   write(*,30) ims_pro, t_end - t_start
-  30 format(1X, 'MPI_Task: ', I5, '      delta_t (ms) : ', f7.4) 
+  30 format(1X, 'MPI_Task: ', I5, '      delta_t (s) : ', f7.4) 
 #else
   call system_clock(c11,c22,c33)
   write(*,30) ims_pro, c11 - c1 

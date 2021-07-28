@@ -50,6 +50,7 @@ subroutine IBM_INITIALIZE_GEOMETRY(txc)
 
   ! transpose eps in epsi, epsj, epsk and allocate neccessary memory
   call IBM_GEOMETRY_TRANSPOSE(txc)
+  call IBM_CHECK_PROCS()
 
   ! generate relevant geometry fields for IBM routines (nobi, nobj, nobk)
   call IBM_GENERATE_GEOMETRY() ! txc for DEBUG
