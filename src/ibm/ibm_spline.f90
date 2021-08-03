@@ -102,13 +102,17 @@ subroutine IBM_SPLINE_XZ(fld, fld_mod, g, nlines, isize_nob, isize_nob_be, nob, 
   TINTEGER, dimension(isize_nob),    intent(in)  :: nob
   TINTEGER, dimension(isize_nob_be), intent(in)  :: nob_b, nob_e
 
-  TINTEGER                                       :: l, ii, ip, ib, iob, iu_il
-  logical                                        :: splines
+  TINTEGER                                       :: l, ii, ip, ib, iob, iu_il,ip_fld, ip_glob, m, ia
+  logical                                        :: splines, splines_glob
   character, dimension(128)                      :: line
 
   ! debug
   TREAL, dimension(isize_field)                  :: wrk3d      ! debug
   TREAL, dimension(isize_field)                  :: fld_mod_tr ! debug
+
+
+  logical, dimension(g%size) :: x_mask, y_mask
+
 
   ! ================================================================== !
   ! debug
@@ -124,7 +128,7 @@ subroutine IBM_SPLINE_XZ(fld, fld_mod, g, nlines, isize_nob, isize_nob_be, nob, 
   fld_mod = fld
 
   ! index ii (dummy index; for x: ii == jk, for y: ii == ik, for z: ii == ij)
-
+#if 0
   do ii = 1, nlines        ! index of ii-plane, loop over plane and check for objects in each line
     if(nob(ii) /= i0) then ! if line contains immersed object(s) --yes-->  spline interpolation
       ip = i0
@@ -235,6 +239,195 @@ subroutine IBM_SPLINE_XZ(fld, fld_mod, g, nlines, isize_nob, isize_nob_be, nob, 
       end do
     end if
   end do
+#endif
+
+
+! ================================================================== !
+! #if 0
+
+
+  do ii = 1, nlines        ! index of ii-plane, loop over plane and check for objects in each line
+    if(nob(ii) /= i0) then ! if line contains immersed object(s) --yes-->  spline interpolation
+      
+      ip           = i0
+      ip_glob      = i0
+      splines_glob = .false.
+
+      do iob = 1, nob(ii)  ! loop over immersed object(s)
+        if(nob_b(ip+ii) == i1) then
+        ! ================================================================== !
+          if(nob_e(ip+ii) == g%size) then
+            ! 1. case: object over full extend of line
+            splines = .false. ! no splines are needed
+
+          else if((nob_e(ip+ii) <= (g%size - nflu)) .eqv. g%periodic) then
+            ! 2. case: object is semi-immersed
+            splines = .false. ! not implemented yet
+
+          else if((nob_e(ip+ii) <= (g%size - nflu)) .neqv. g%periodic) then
+            ! 3. case: object is semi-immersed
+            splines = .false. ! not implemented yet
+
+          else
+            write(line, *) 'IBM_SPLINE not enough fluid points right of the right interface'
+            call IO_WRITE_ASCII(efile, line)
+            call DNS_STOP(DNS_ERROR_IBM_SPLINE)
+          end if
+        ! ================================================================== !
+        else if(nob_b(ip+ii) >= (nflu+1)) then
+          if(nob_e(ip+ii) <= (g%size - nflu)) then 
+            ! 4. case: object is fully immersed
+
+            ! ============================================================== !
+            ! 1. option
+            ! call IBM_SPLINE_VECTOR_4(fld, xa, ya, xb, ib, nob_b(ip+ii), nob_e(ip+ii), nlines, ii)
+
+            ! ============================================================== !
+            ! 2. option 
+            if (ip_glob == 0) then
+              ! global vector packing (copy full lines for spline generation)
+              ip_fld = (ii - 1) * g%size + 1       ! current fld_index of beginning of the line
+      
+              xa     = g%nodes
+              xb     = g%nodes
+              ya     = fld(ip_fld:ip_fld+g%size-1) ! whole line where objects are located
+              
+              x_mask = .true. ! mask arraw for packing
+              y_mask = .true. ! mask arraw for packing
+
+              splines_glob = .true. 
+              ip_glob      = ip_glob + 1 ! just ini full line once 
+            end if
+            ! 
+            x_mask(nob_b(ip+ii)+1:nob_e(ip+ii)-1) = .false. ! without interface points
+            y_mask(nob_b(ip+ii)) = .false.                  ! only    interface points  
+            y_mask(nob_e(ip+ii)) = .false.                  ! only    interface points
+            
+          else if((nob_e(ip+ii) == g%size) .eqv. g%periodic) then
+            ! 5. case: object is semi-immersed
+            
+            splines = .false. ! not implemented yet
+            
+          else if((nob_e(ip+ii) == g%size) .neqv. g%periodic) then
+            ! 6. case: object is semi-immersed
+            
+            splines = .false. ! not implemented yet
+          else
+            write(line, *) 'IBM_SPLINE not enough fluid points left of the left interface'
+            call IO_WRITE_ASCII(efile, line)
+            call DNS_STOP(DNS_ERROR_IBM_SPLINE)
+          end if
+        else
+          write(line, *) 'IBM_SPLINE this case is not implemented yet'
+          call IO_WRITE_ASCII(efile, line)
+          call DNS_STOP(DNS_ERROR_NOTIMPL)
+        end if
+
+
+        ! ================================================================== !
+        ! spline interpolation and fill gap in fld_ibm
+        ! if (splines) then
+        !   ! generate splines
+        !   call IBM_SPLINE(xa, ya, ib, xb(1:ib), yb(1:ib)) 
+        !   ! fld index of left interface
+        !   iu_il = (nob_b(ip+ii) - 1) * nlines + ii     
+        !   ! replace splines in solid gaps
+        !   do l = 1, ib
+        !     fld_mod(iu_il + (l-1) * nlines) = yb(l)
+        !   end do
+        ! end if
+        ip = ip + nlines
+
+      end do
+
+      ! global splines
+      ! ================================================================== !
+      ! debug
+      ! if (ims_pro == 0) write(*,*) "size x_mask", size(x_mask)
+      ! if (ims_pro == 0) write(*,*) "size xa    ", size(xa)
+      ! if (ims_pro == 0) write(*,*) "size ya    ", size(ya)
+      ! if (ims_pro == 0) write(*,*) "size g%size", g%size
+      ! if (ims_pro == 0) then
+      !   do m = 1, g%size
+      !     write(*,*) "| m | x_mask | y_mask | xa | ya |", m , x_mask(m), y_mask(m), xa(m), ya(m)
+      !   end do
+      !   do m = 1, ia
+      !     write(*,*) "| ia | xa | ya |", m , xa(m), ya(m)
+      !   end do
+      ! end if
+      ! if (ims_pro == 0) write(*,*) "xa", xa
+      ! ================================================================== !
+      ! set interface points to zero
+      where (.not. y_mask) ya = C_0_R
+      ! if (ims_pro == 0) then
+      !   do m = 1, g%size
+      !     write(*,*) "| m | y_mask | ya |", m , y_mask(m), ya(m)
+      !   end do
+      ! end if
+
+      ! pack
+      xa = pack(xa,x_mask)
+      ya = pack(ya,x_mask)
+
+      ib = g%size
+      ia = size(xa)
+
+      ! call IBM_SPLINE_GLOB(xa, ya, ia, ib, xb(1:ib), yb(1:ib))
+      
+      
+      ! ! ! ================================================================== !
+      ! ! ! debug
+      ! if (ims_pro == 0) write(*,*) "size x_mask", size(x_mask)
+      ! if (ims_pro == 0) write(*,*) "size ia    ", ia
+      ! if (ims_pro == 0) write(*,*) "size ib    ", ib
+      ! if (ims_pro == 0) write(*,*) "size xa    ", size(xa)
+      ! if (ims_pro == 0) write(*,*) "size xb    ", size(xb)
+      ! if (ims_pro == 0) write(*,*) "size ya    ", size(ya)
+      ! if (ims_pro == 0) write(*,*) "size yb    ", size(yb)
+      ! if (ims_pro == 0) write(*,*) "size g%size", g%size
+      ! if (ims_pro == 0) write(*,*) "size fld_mod(ip_fld:ip_fld+g%size-1)", size(fld_mod(ip_fld:ip_fld+g%size-1))
+
+      ! if (ims_pro == 0) then
+      !   do m = 1, g%size
+      !     write(*,*) "| m | x_mask | y_mask |", m , x_mask(m), y_mask(m)
+      !   end do
+      ! !   do m = 1, ia
+      ! !     write(*,*) "| ia | xa | ya |", m , xa(m), ya(m)
+      ! !   end do
+      ! end if
+      ! ! if (ims_pro == 0) write(*,*) "xa", xa
+      ! ! ================================================================== !
+
+      ! replace 
+      ! spline interpolation and fill gap in fld_ibm
+      if (splines_glob) then
+        ! generate splines
+        call IBM_SPLINE_GLOB(xa, ya, ia, ib, xb(1:ib), yb(1:ib))
+        ! interface point to zero
+        where (.not. y_mask) fld_mod(ip_fld:ip_fld+g%size-1) = C_0_R 
+        ! splines
+        where (.not. x_mask) fld_mod(ip_fld:ip_fld+g%size-1) = yb(:)
+        !
+      end if
+
+
+      ! ! ================================================================== !
+      ! ! debug
+    
+      ! if (ims_pro == 0) then
+      !   do m = 1, g%size
+      !     write(*,*) "| m | x_mask | y_mask | xb | yb | fld | fld_mod |", m , x_mask(m), y_mask(m), xb(m), yb(m), fld(ip_fld+m-1), fld_mod(ip_fld+m-1)
+      !   end do
+      ! end if
+      ! ! ================================================================== !
+
+      ! call DNS_STOP(DNS_ERROR_NOTIMPL)
+
+    end if
+  end do
+
+! #endif
+
 
 !   if (g%name == 'z') then
 !     ! ================================================================== !
@@ -417,3 +610,74 @@ subroutine IBM_SPLINE_VECTOR_4(fld, xa, ya, xb, ib, ip_il, ip_ir, nlines, plane)
 
   return
 end subroutine IBM_SPLINE_VECTOR_4
+
+!########################################################################
+
+subroutine IBM_SPLINE_GLOB(xa, ya, ia, ib, xb, yb)
+  
+  use DNS_IBM,       only: isize_iwrk_ibm, nest, nsp, kspl
+  use DNS_IBM,       only: wrk_ibm, iwrk_ibm
+  use DNS_CONSTANTS, only: efile
+   
+  implicit none
+  
+#include "integers.h"
+
+  TINTEGER,                 intent(in)  :: ia, ib
+  TREAL,    dimension(ia),  intent(in)  :: xa, ya 
+  TREAL,    dimension(ib),  intent(in)  :: xb
+  TREAL,    dimension(ib),  intent(out) :: yb 
+
+  TREAL                                 :: xstart, xend, s, fp
+  TINTEGER                              :: iopt, n, l, ier
+  TINTEGER                              :: ip1, ip2, ip3, ip4
+
+  character, dimension(128)             :: line
+  
+  ! ================================================================== !
+  ! spline function parameter
+  iopt = i0    ! (iopt=0 or 1) smoothing spline, weighted least-squares spline (iopt=-1)
+  s    = C_0_R ! control the tradeoff between closeness of fit and smoothness
+
+  ! set interval for spline approximation
+  xstart = xa(1);  xend = xa(ia)
+ 
+  ! define working arrays and their relative positions
+  ip1  = 1          ! w(nsp)
+  ip2  = ip1 + nsp  ! t(nest)
+  ip3  = ip2 + nest ! c(nest)
+  ip4  = ip3 + nest ! wrk(nsp*(kspl+1)+nest*(7+3*kspl))
+
+  ! weights of data points w(nsp)
+  do l = 1, nsp
+    wrk_ibm(l) = C_1_R ! here: all weights are equal
+  end do
+
+  !    curfit(iopt, m,   x,  y,  w,            xb,     xe,   k,    s, nest, n, &
+  call curfit(iopt, ia,  xa, ya, wrk_ibm(ip1), xstart, xend, kspl, s, nest, n, & 
+  !           t,            c,            fp, wrk,          lwrk,           iwrk,     ier)
+              wrk_ibm(ip2), wrk_ibm(ip3), fp, wrk_ibm(ip4), isize_iwrk_ibm, iwrk_ibm, ier)
+  
+  if ( (ier /= 0) .and. (ier /= -1) ) then
+    write(line, *) 'INTERPOLATE_1D. Curfit error code = ', ier
+    call IO_WRITE_ASCII(efile, line)
+    call DNS_STOP(DNS_ERROR_CURFIT)
+  end if
+
+  !    splev(t,            n, c,            k,    x,  y,  m,  ier)
+  call splev(wrk_ibm(ip2), n, wrk_ibm(ip3), kspl, xb, yb, ib, ier)
+
+  ! force yb at interface to zero (without this yb approx 10^-16 at interface)
+  yb(1)  = C_0_R
+  yb(ib) = C_0_R
+  
+  if (ier /= 0) then
+    write(line, *) 'INTERPOLATE_1D. Splev error code = ', ier
+    call IO_WRITE_ASCII(efile, line)
+    call DNS_STOP(DNS_ERROR_CURFIT)
+  end if
+
+  return
+end subroutine IBM_SPLINE_GLOB
+
+!########################################################################

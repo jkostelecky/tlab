@@ -92,7 +92,8 @@ subroutine IBM_ALLOCATE(allocated)
   isize_nobj_be   = nxz * nob_max  
   isize_nobk_be   = nxy * nob_max
   !
-  nsp             = 2 * nflu + 2    ! number of data points (with 2 interface points) nsp > kspl
+  ! nsp             = 2 * nflu + 2    ! number of data points (with 2 interface points) nsp > kspl
+  nsp             = max(g(1)%size, max(g(2)%size, g(3)%size))    ! test global splines
   ! cf. fitpack package (routines curfit and splev)
   nest            = nsp + kspl + 1
   isize_wrk_ibm   = nsp + 2 * nest + nsp * (kspl + 1) + nest * (7 + 3 * kspl)

@@ -53,8 +53,7 @@ PROGRAM VBURGERS
   IF (ibm) THEN
     imode_ibm     = 1                                              ! IBM on
     ibm_allocated = .FALSE.                                        ! not allocated yet
-   !  xbars_geo(1)  = 4; xbars_geo(2) = g(2)%size; xbars_geo(3) = 10 ! geometry description: xbars_geo(3)=[number,height,width]
-    xbars_geo(1)  = 4; xbars_geo(2) = g(2)%size; xbars_geo(3) = 10 ! geometry description: xbars_geo(3)=[number,height,width]
+    xbars_geo(1)  = 4; xbars_geo(2) = 20; xbars_geo(3) = 10 ! geometry description: xbars_geo(3)=[number,height,width]
     ibm_burgers   = .TRUE.                                         ! use IBM in burgers routines
   END IF
 

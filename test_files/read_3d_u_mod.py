@@ -37,7 +37,7 @@ f.close()
 
 #---------------------------------------------------------------------------#
 # plot settings 
-plt.rcParams['figure.dpi'] = 250 
+plt.rcParams['figure.dpi'] = 120 
 size    = (8,6)
 shading = 'nearest'#'gouraud'
 figs    = 'figs' 
