@@ -22,6 +22,9 @@ test_debug_little/*
 test_little/*
 test_parallel/*
 files_history/*
+build_debug_little_channel/*
+test_debug_little_channel/*
+test_little_channel/*
 *~
 */*~
 */*/*~
