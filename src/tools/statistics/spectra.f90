@@ -568,24 +568,6 @@ program SPECTRA
             end do
         end if
 
-! If IBM is active: remove mean values in solid regions from fluctuations (except pressure)
-        if (imode_ibm == 1) then
-            if (flow_on) then
-                do iv = 1, 3 ! u,v,w fields - skip pressure
-                    call IBM_BCS_FIELD(vars(iv)%field)
-                end do
-                if (nfield_ref > 4) then
-                    do iv = 5, nfield_ref ! r,t,(s) fields
-                        call IBM_BCS_FIELD(vars(iv)%field)
-                    end do
-                end if
-            else if ((.not. flow_on) .and. (scal_on)) then
-                do iv = 1, nfield_ref    ! s fields (no pressure)
-                    call IBM_BCS_FIELD(vars(iv)%field)
-                end do
-            end if
-        end if
-
 ! reset if needed
         if (opt_time == SPEC_SINGLE) then
             outx = C_0_R; outz = C_0_R; outr = C_0_R
