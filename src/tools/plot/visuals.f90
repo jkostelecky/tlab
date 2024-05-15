@@ -498,6 +498,27 @@ program VISUALS
                     end if
 
                 else if (opt_vec(iv) == 8) then ! pressure
+                    if (pdecomposition%name == 'resolved') then
+                        pdecomposition%name = 'coriolis'
+                        write(*, '(A)') 'Value of pdecomposition%name:', pdecomposition%name
+                        call FI_PRESSURE_BOUSSINESQ(q, s, txc(1, 1), txc(1, 2), txc(1, 3), txc(1, 4))
+                        pdecomposition%name = 'buoyancy'
+                        write(*, '(A)') 'Value of pdecomposition%name:', pdecomposition%name
+                        call FI_PRESSURE_BOUSSINESQ(q, s, txc(1, 1), txc(1, 2), txc(1, 3), txc(1, 4))
+                        pdecomposition%name = 'diffusion'
+                        write(*, '(A)') 'Value of pdecomposition%name:', pdecomposition%name
+                        call FI_PRESSURE_BOUSSINESQ(q, s, txc(1, 1), txc(1, 2), txc(1, 3), txc(1, 4))
+                        pdecomposition%name = 'advection'
+                        write(*, '(A)') 'Value of pdecomposition%name:', pdecomposition%name
+                        call FI_PRESSURE_BOUSSINESQ(q, s, txc(1, 1), txc(1, 2), txc(1, 3), txc(1, 4))
+                        pdecomposition%name = 'advdiff'
+                        write(*, '(A)') 'Value of pdecomposition%name:', pdecomposition%name
+                        call FI_PRESSURE_BOUSSINESQ(q, s, txc(1, 1), txc(1, 2), txc(1, 3), txc(1, 4))
+                        pdecomposition%name = 'total'
+                        write(*, '(A)') 'Value of pdecomposition%name:', pdecomposition%name
+                        call FI_PRESSURE_BOUSSINESQ(q, s, txc(1, 1), txc(1, 2), txc(1, 3), txc(1, 4))
+                    end if
+                    
                     plot_file = 'Pressure'//time_str(1:MaskSize)
                     call FI_PRESSURE_BOUSSINESQ(q, s, txc(1, 1), txc(1, 2), txc(1, 3), txc(1, 4))
                     call IO_WRITE_VISUALS(plot_file, opt_format, imax, jmax, kmax, i1, subdomain, txc(1, 1), wrk3d)
