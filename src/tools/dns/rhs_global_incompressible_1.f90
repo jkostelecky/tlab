@@ -20,7 +20,6 @@ subroutine RHS_GLOBAL_INCOMPRESSIBLE_1()
     use TLAB_CONSTANTS, only: tfile
 #endif
     use TLAB_CONSTANTS, only: wp, wi, BCS_NN
-    use TLAB_VARS, only: imode_ibm
     use TLAB_VARS, only: imode_eqns
     use TLAB_VARS, only: imax, jmax, kmax, isize_field
     use TLAB_VARS, only: g
@@ -35,7 +34,7 @@ subroutine RHS_GLOBAL_INCOMPRESSIBLE_1()
     use DNS_TOWER
     use BOUNDARY_BUFFER
     use BOUNDARY_BCS
-    use IBM_VARS, only: imode_ibm_scal, ibm_burgers
+    use IBM_VARS, only: imode_ibm, imode_ibm_scal, ibm_burgers
     use OPR_PARTIAL
     use OPR_BURGERS
     use OPR_ELLIPTIC
@@ -293,7 +292,13 @@ subroutine RHS_GLOBAL_INCOMPRESSIBLE_1()
 
     ! Saving pressure for towers to tmp array
     if (use_tower .and. rkm_substep == rkm_endstep) then
-        call DNS_TOWER_ACCUMULATE(tmp1, 4, wrk1d)
+        if (stagger_on) then ! Stagger pressure field back on velocity grid (only for towers)
+            call OPR_PARTIAL_Z(OPR_P0_INT_PV, imax, jmax, kmax, bcs, g(3), tmp1, tmp5)
+            call OPR_PARTIAL_X(OPR_P0_INT_PV, imax, jmax, kmax, bcs, g(1), tmp5, tmp4)
+            call DNS_TOWER_ACCUMULATE(tmp4, 4, wrk1d)
+        else
+            call DNS_TOWER_ACCUMULATE(tmp1, 4, wrk1d)
+        end if
     end if
 
     if (stagger_on) then

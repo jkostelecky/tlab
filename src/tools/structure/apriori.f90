@@ -18,6 +18,7 @@ program APRIORI
 #ifdef USE_MPI
     use TLAB_MPI_PROCS
 #endif
+    use Thermodynamics
     use IO_FIELDS
     use OPR_FILTERS
     use OPR_FOURIER
@@ -66,7 +67,7 @@ program APRIORI
     call TLAB_START()
 
     call IO_READ_GLOBAL(ifile)
-    call THERMO_INITIALIZE()
+    call Thermodynamics_Initialize(ifile)
 
 #ifdef USE_MPI
     call TLAB_MPI_INITIALIZE
@@ -153,7 +154,6 @@ program APRIORI
     end select
 
 ! -------------------------------------------------------------------
-    isize_wrk3d = isize_txc_field
 #ifdef USE_MPI
     isize_wrk3d = isize_wrk3d + isize_field ! more space in wrk3d array needed in IO_WRITE_VISUALS
 #endif

@@ -1,6 +1,6 @@
 module TLAB_VARS
     use TLAB_TYPES, only: grid_dt, filter_dt, term_dt, profiles_dt
-    use TLAB_CONSTANTS, only: MAX_VARS, MAX_NSP, wp, wi, sp
+    use TLAB_CONSTANTS, only: MAX_VARS, wp, wi, sp
     use TLAB_CONSTANTS, only: MAX_STATS_SPATIAL
     implicit none
     save
@@ -28,8 +28,6 @@ module TLAB_VARS
     logical :: fourier_on = .false.     ! using FFT libraries
     logical :: stagger_on = .false.     ! horizontal staggering of pressure
 
-    integer :: imode_ibm                ! IBM mode
-
 ! ###################################################################
 ! Iteration
 ! ###################################################################
@@ -50,39 +48,38 @@ module TLAB_VARS
 ! auxiliary arrays
     integer(wi) :: isize_wrk1d, inb_wrk1d           ! 1D scratch arrays
     integer(wi) :: isize_wrk2d, inb_wrk2d           ! 2D scratch arrays
-    integer(wi) :: isize_wrk3d                      ! 3D scratch arrays
+    integer(wi) :: isize_wrk3d                      ! 3D scratch array (only 1)
     integer(wi) :: isize_txc_field, inb_txc         ! 3D arrays for intermediate calculations
     integer(wi) :: isize_txc_dimx, isize_txc_dimz   ! partition for MPI data transposition
 
 ! ###################################################################
-    type(grid_dt), dimension(3) :: g        ! Grid information along 3 directions
-    real(wp) :: area                        ! Horizontal area and volume
+    type(grid_dt), dimension(3) :: g                ! Grid information along 3 directions
+    real(wp) :: area                                ! Horizontal area and volume
 
 ! ###################################################################
-    type(profiles_dt) :: qbg(3)                 ! Velocity background information
-    type(profiles_dt) :: sbg(MAX_NSP)           ! Scalars background information
-    type(profiles_dt) :: pbg, rbg, tbg, hbg     ! Pressure, density, temperature, enthalpy background information
-
-    real(wp), allocatable :: sbackground(:, :)  ! Scalar reference profiles
+! background information to set up bcs, ics, and reference profiles
+! ###################################################################
+    type(profiles_dt) :: qbg(3)                     ! Velocity
+    type(profiles_dt) :: sbg(MAX_VARS)              ! Scalars
+    type(profiles_dt) :: pbg, rbg, tbg, hbg         ! Pressure, density, temperature, enthalpy
 
 ! ###################################################################
-    type(term_dt) :: buoyancy               ! Buoyancy parameters
-    type(term_dt) :: coriolis               ! Coriolis parameters
-    type(term_dt) :: radiation              ! Radiation parameters
-    type(term_dt) :: transport              ! Transport parameters
-    type(term_dt) :: chemistry              ! Chemistry parameters
-    type(term_dt) :: subsidence             ! Large-scale parameters
-    type(term_dt) :: random                 ! Random Forcing parameters
+! phenomena in addition to the navier-stokes equations
+! ###################################################################
+    type(term_dt) :: buoyancy                       ! Buoyancy parameters
+    type(term_dt) :: coriolis                       ! Coriolis parameters
+    type(term_dt) :: subsidence                     ! Large-scale parameters
 
 ! ###################################################################
 ! Nondimensional numbers
 ! ###################################################################
-    real(wp) :: visc, prandtl, schmidt(MAX_NSP)     ! molecular transport
+    real(wp) :: visc, prandtl, schmidt(MAX_VARS)    ! molecular transport
     real(wp) :: mach                                ! compressibility
-    real(wp) :: damkohler(MAX_NSP)                  ! reaction
-    real(wp) :: froude                              ! body force
+    real(wp) :: gama0                               ! Specific heat ratio, Cp0/Cv0 = Cp0/(Cp0-R0)
+    real(wp) :: damkohler(MAX_VARS)                 ! reaction
+    real(wp) :: froude                              ! gravity force
     real(wp) :: rossby                              ! Coriolis force
-    real(wp) :: stokes                              ! inertial effects
+    real(wp) :: stokes                              ! particle inertial effects
     real(wp) :: settling                            ! sedimentation effects
 
 ! ###########################################################

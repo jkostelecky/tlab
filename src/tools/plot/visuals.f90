@@ -21,10 +21,12 @@ program VISUALS
     use TLAB_MPI_PROCS
 #endif
     use FI_SOURCES, only: bbackground, FI_BUOYANCY, FI_BUOYANCY_SOURCE
-    use THERMO_VARS, only: imixture
-    use THERMO_VARS, only: NSP, THERMO_SPNAME
+    use Thermodynamics, only: imixture, NSP, THERMO_SPNAME, Thermodynamics_Initialize
     use THERMO_ANELASTIC
     use THERMO_AIRWATER
+    use Radiation
+    use Microphysics
+    use Chemistry
     use PARTICLE_VARS
     use PARTICLE_ARRAYS
     use PARTICLE_PROCS
@@ -92,7 +94,10 @@ program VISUALS
     call TLAB_START()
  
     call IO_READ_GLOBAL(ifile)
-    call THERMO_INITIALIZE()
+    call Thermodynamics_Initialize(ifile)
+    call Radiation_Initialize(ifile)
+    call Microphysics_Initialize(ifile)
+    call Chemistry_Initialize(ifile)
     call PARTICLE_READ_GLOBAL(ifile)
 
     ! -------------------------------------------------------------------
@@ -212,7 +217,7 @@ program VISUALS
         if (opt_vec(iv) == iscal_offset + 12) then; iread_flow = .true.; iread_scal = .true.; inb_txc = max(inb_txc, 4); end if
         if (opt_vec(iv) == iscal_offset + 14) then; iread_flow = .true.; inb_txc = max(inb_txc, 2); end if
         if (opt_vec(iv) == iscal_offset + 15) then; iread_flow = .true.; inb_txc = max(inb_txc, 6); end if
-        if (opt_vec(iv) == iscal_offset + 16) then; iread_scal = .true.; inb_txc = max(inb_txc, 2); end if
+        if (opt_vec(iv) == iscal_offset + 16) then; iread_scal = .true.; inb_txc = max(inb_txc, 4); end if
         if (opt_vec(iv) == iscal_offset + 17) then; iread_scal = .true.; inb_txc = max(inb_txc, 2); end if
         if (opt_vec(iv) == iscal_offset + 18) then; iread_part = .true.; inb_txc = max(inb_txc, 2); end if
         if (opt_vec(iv) == iscal_offset + 19) then; iread_flow = .true.; iread_scal = .true.; inb_txc = max(inb_txc, 7 ); end if
@@ -298,13 +303,9 @@ program VISUALS
     ! -------------------------------------------------------------------
     allocate (gate(isize_field))
 
-    isize_wrk3d = isize_txc_field
 #ifdef USE_MPI
     isize_wrk3d = isize_wrk3d + isize_field ! more space in wrk3d array needed in IO_WRITE_VISUALS
 #endif
-    if (part%type /= PART_TYPE_NONE) then
-        isize_wrk3d = max(isize_wrk3d, (imax + 1)*jmax*(kmax + 1))
-    end if
 
     call TLAB_ALLOCATE(C_FILE_LOC)
 
@@ -857,15 +858,9 @@ program VISUALS
             if (opt_vec(iv) == iscal_offset + 16) then
                 do is = 1, inb_scal
 
-                    if (radiation%active(is)) then
+                    if (infraredProps%active(is)) then
                         write (str, *) is; plot_file = 'Radiation'//trim(adjustl(str))//time_str(1:MaskSize)
-                        if (imode_eqns == DNS_EQNS_ANELASTIC) then
-                         call THERMO_ANELASTIC_WEIGHT_OUTPLACE(imax, jmax, kmax, rbackground, s(1, radiation%scalar(is)), txc(1, 2))
-                            call OPR_RADIATION(radiation, imax, jmax, kmax, g(2), txc(1, 2), txc(1, 1))
-                            call THERMO_ANELASTIC_WEIGHT_INPLACE(imax, jmax, kmax, ribackground, txc(1, 1))
-                        else
-                           call OPR_RADIATION(radiation, imax, jmax, kmax, g(2), s(1, radiation%scalar(1)), txc(1, 1))
-                        end if
+                        call Radiation_Infrared_Y(infraredProps, imax, jmax, kmax, g(2), s, txc(:, 1), txc(:, 2), txc(:, 3), txc(:, 4))
                         call IO_WRITE_VISUALS(plot_file, opt_format, imax, jmax, kmax, i1, subdomain, txc(1, 1), wrk3d)
                     end if
 
@@ -1077,7 +1072,7 @@ end subroutine VISUALS_ACCUMULATE_FIELDS
         else if (iformat == 2 .and. iflag_mode > 0) then  ! single precision, using MPI_IO
             if (ny_aux /= ny) then
                 do ifield = 1, nfield
-                    call REDUCE_BLOCK_INPLACE(nx, ny, nz, i1, subdomain(3), i1, nx, ny_aux, nz, field(1, ifield), txc)
+                    call REDUCE_BLOCK_INPLACE(nx, ny, nz, i1, subdomain(3), i1, nx, ny_aux, nz, field(1, ifield), wrk1d)
                 end do
             end if
 
@@ -1107,7 +1102,7 @@ end subroutine VISUALS_ACCUMULATE_FIELDS
                 call TLAB_MPI_WRITE_PE0_SINGLE(LOC_UNIT_ID, nx, ny, nz, subdomain, field(1, ifield), txc(1, 1), txc(1, 2))
                 if (ims_pro == 0) then
 #else
-                    call REDUCE_BLOCK_INPLACE(nx, ny, nz, subdomain(1), subdomain(3), subdomain(5), nx_aux, ny_aux, nz_aux, field(1, ifield), txc)
+                    call REDUCE_BLOCK_INPLACE(nx, ny, nz, subdomain(1), subdomain(3), subdomain(5), nx_aux, ny_aux, nz_aux, field(1, ifield), wrk1d)
                     write (LOC_UNIT_ID) SNGL(field(1:nx_aux*ny_aux*nz_aux, ifield))
 #endif
                     close (LOC_UNIT_ID)

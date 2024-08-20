@@ -10,6 +10,11 @@ program DNS
 #ifdef USE_MPI
     use TLAB_MPI_PROCS
 #endif
+    use Thermodynamics
+    use Radiation
+    use Microphysics
+    use Chemistry
+    use SpecialForcing
     use PARTICLE_VARS
     use PARTICLE_ARRAYS
     use PARTICLE_PROCS
@@ -41,14 +46,15 @@ program DNS
     call TLAB_START()
 
     call IO_READ_GLOBAL(ifile)
-    call THERMO_INITIALIZE()
+    call Thermodynamics_Initialize(ifile)
+    call Radiation_Initialize(ifile)
+    call Microphysics_Initialize(ifile)
+    call Chemistry_Initialize(ifile)
+    call SpecialForcing_Initialize(ifile)
     call PARTICLE_READ_GLOBAL(ifile)
-    call DNS_READ_LOCAL(ifile)
     if (imode_ibm == 1) then
         call IBM_READ_INI(ifile)
-        call IBM_READ_CONSISTENCY_CHECK(imode_rhs, BcsFlowJmin%type(:),    BcsFlowJmax%type(:), &
-                                                   BcsScalJmin%type(:),    BcsScalJmax%type(:), &
-                                                   BcsScalJmin%SfcType(:), BcsScalJmax%SfcType(:))
+        call IBM_READ_CONSISTENCY_CHECK()
     end if
 #ifdef USE_MPI
     call TLAB_MPI_INITIALIZE
@@ -56,6 +62,9 @@ program DNS
     if (imode_rhs == EQNS_RHS_NONBLOCKING) call DNS_NB3DFFT_INITIALIZE
 #endif
 #endif
+    ! call TLab_Consistency_Check() ! TBD
+
+    call DNS_READ_LOCAL(ifile)
 
     ! #######################################################################
     ! Initialize memory space and grid data
@@ -363,7 +372,7 @@ contains
 !# logs_data11 Maximum dilatation
 !########################################################################
     subroutine DNS_LOGS_INITIALIZE()
-        use THERMO_VARS, only: imixture
+        use Thermodynamics, only: imixture
 
         integer ip
         character(len=256) line1
@@ -406,7 +415,7 @@ contains
 !########################################################################
 
     subroutine DNS_LOGS()
-        use THERMO_VARS, only: imixture, NEWTONRAPHSON_ERROR
+        use Thermodynamics, only: imixture, NEWTONRAPHSON_ERROR
 #ifdef USE_MPI
         use MPI
         use TLAB_MPI_VARS, only: ims_err

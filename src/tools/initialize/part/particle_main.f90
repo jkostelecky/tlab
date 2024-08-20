@@ -8,6 +8,7 @@ program INIPART
 #ifdef USE_MPI
     use TLAB_MPI_PROCS
 #endif
+    use Thermodynamics
     use PARTICLE_VARS
     use PARTICLE_ARRAYS
     use PARTICLE_PROCS
@@ -19,7 +20,7 @@ program INIPART
     call TLAB_START()
 
     call IO_READ_GLOBAL(ifile)
-    call THERMO_INITIALIZE()
+    call Thermodynamics_Initialize(ifile)
     call PARTICLE_READ_GLOBAL(ifile)
 
     if (part%type /= PART_TYPE_NONE) then
@@ -32,7 +33,6 @@ program INIPART
         ! -------------------------------------------------------------------
         inb_flow_array = 0
         inb_scal_array = 0
-        isize_wrk3d = imax*jmax*kmax
         inb_txc = inb_scal
 
         call TLAB_ALLOCATE(C_FILE_LOC)

@@ -67,7 +67,7 @@ program SL_NORMAL_ANALYSIS
     call DNS_START
 
     call IO_READ_GLOBAL(ifile)
-    call THERMO_INITIALIZE()
+    call Thermodynamics_Initialize(ifile)
 
 #ifdef USE_MPI
     call TLAB_MPI_INITIALIZE
@@ -75,7 +75,6 @@ program SL_NORMAL_ANALYSIS
 
     call SCANINIINT(bakfile, ifile, 'BufferZone', 'NumPointsY', '0', ibuffer_npy)
 
-    isize_wrk3d = imax*jmax*kmax
     itxc_size = imax*jmax*kmax*7
 
 ! -------------------------------------------------------------------

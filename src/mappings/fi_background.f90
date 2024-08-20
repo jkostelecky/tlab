@@ -10,11 +10,10 @@ subroutine FI_BACKGROUND_INITIALIZE()
     use TLAB_VARS, only: g
     use TLAB_VARS, only: qbg, pbg, rbg, tbg, hbg, sbg
     use TLAB_VARS, only: damkohler, froude, schmidt
-    use TLAB_VARS, only: sbackground
     use TLAB_VARS, only: buoyancy
     use TLAB_POINTERS_3D, only: p_wrk1d
     use TLAB_PROCS
-    use THERMO_VARS, only: imixture, GRATIO, scaleheight, MRATIO
+    use Thermodynamics, only: imixture, GRATIO, RRATIO, scaleheight
     use THERMO_ANELASTIC
     use THERMO_AIRWATER
     use PROFILES
@@ -38,7 +37,7 @@ subroutine FI_BACKGROUND_INITIALIZE()
         if (rbg%type == PROFILE_NONE .and. tbg%type /= PROFILE_NONE) then
             rbg = tbg
             dummy = tbg%delta/tbg%mean
-            rbg%mean = MRATIO*pbg%mean/tbg%mean/(1.0_wp - 0.25_wp*dummy*dummy)
+            rbg%mean = pbg%mean/tbg%mean/(1.0_wp - 0.25_wp*dummy*dummy)/RRATIO
             rbg%delta = -rbg%mean*dummy
 
         else if (rbg%type == PROFILE_NONE .and. hbg%type /= PROFILE_NONE) then
@@ -47,7 +46,7 @@ subroutine FI_BACKGROUND_INITIALIZE()
         else
             tbg = rbg
             dummy = rbg%delta/rbg%mean
-            tbg%mean = MRATIO*pbg%mean/rbg%mean/(1.0_wp - 0.25_wp*dummy*dummy)
+            tbg%mean = pbg%mean/rbg%mean/(1.0_wp - 0.25_wp*dummy*dummy)/RRATIO
             tbg%delta = -tbg%mean*dummy
 
         end if
@@ -64,15 +63,6 @@ subroutine FI_BACKGROUND_INITIALIZE()
         if (sbg(is)%relative) sbg(is)%ymean = g(2)%nodes(1) + g(2)%scale*sbg(is)%ymean_rel
     end do
 
-    ! -----------------------------------------------------------------------
-    ! Construct reference scalar profiles
-    allocate (sbackground(g(2)%size, inb_scal_array))
-    do is = 1, inb_scal
-        do j = 1, g(2)%size
-            sbackground(j, is) = PROFILES_CALCULATE(sbg(is), g(2)%nodes(j))
-        end do
-    end do
-
 ! #######################################################################
     if (any([DNS_EQNS_INCOMPRESSIBLE, DNS_EQNS_ANELASTIC] == imode_eqns)) then
         ! -----------------------------------------------------------------------
@@ -82,12 +72,18 @@ subroutine FI_BACKGROUND_INITIALIZE()
         allocate (pbackground(g(2)%size))
         allocate (tbackground(g(2)%size))
         allocate (epbackground(g(2)%size))
-
+        allocate (sbackground(g(2)%size, inb_scal_array))
+    
         rbackground = 1.0_wp ! defaults
         ribackground = 1.0_wp
         pbackground = 1.0_wp
         tbackground = 1.0_wp
         epbackground = 0.0_wp
+        do is = 1, inb_scal
+            do j = 1, g(2)%size
+                sbackground(j, is) = PROFILES_CALCULATE(sbg(is), g(2)%nodes(j))
+            end do
+        end do
 
         if (scaleheight > 0.0_wp) then
             epbackground = (g(2)%nodes - pbg%ymean)*GRATIO/scaleheight
@@ -213,7 +209,7 @@ subroutine FI_HYDROSTATIC_H(g, s, e, T, p, wrk1d)
     use TLAB_TYPES, only: grid_dt
     use TLAB_VARS, only: imode_eqns
     use TLAB_VARS, only: pbg, damkohler, buoyancy
-    use THERMO_VARS, only: imixture, scaleheight
+    use Thermodynamics, only: imixture, scaleheight
     use THERMO_ANELASTIC
     use THERMO_AIRWATER
     use THERMO_THERMAL
@@ -418,6 +414,7 @@ subroutine FLOW_SPATIAL_VELOCITY(imax, jmax, prof_loc, diam_u, &
     use TLAB_CONSTANTS, only: efile, wfile, wp, wi
     use TLAB_PROCS
     use PROFILES
+    use Integration, only: Int_Simpson
     implicit none
 
     integer(wi) imax, jmax
@@ -435,7 +432,6 @@ subroutine FLOW_SPATIAL_VELOCITY(imax, jmax, prof_loc, diam_u, &
     real(wp) c1, c2
     real(wp) delta, eta, ExcMom_vi, Q1, Q2, U2, UC
     real(wp) dummy, flux_aux, diam_loc
-    real(wp) SIMPSON_NU
     real(wp) xi_tr, dxi_tr
 
     integer(wi) i, j, jsym
@@ -501,7 +497,7 @@ subroutine FLOW_SPATIAL_VELOCITY(imax, jmax, prof_loc, diam_u, &
     do j = 1, jmax
         wrk1d(j, 1) = rho_vi(j)*u_vi(j)*(u_vi(j) - U2)
     end do
-    ExcMom_vi = SIMPSON_NU(jmax, wrk1d, y)
+    ExcMom_vi = Int_Simpson(wrk1d(1:jmax, 1), y(1:jmax))
 
     do i = 1, imax
 ! Correction factor varying between 1 at the inflow and jet_u_flux
@@ -515,8 +511,8 @@ subroutine FLOW_SPATIAL_VELOCITY(imax, jmax, prof_loc, diam_u, &
             wrk1d(j, 1) = rho(i, j)*u(i, j)*u(i, j)
             wrk1d(j, 2) = rho(i, j)*u(i, j)
         end do
-        Q1 = SIMPSON_NU(jmax, wrk1d(1, 1), y)
-        Q2 = U2*SIMPSON_NU(jmax, wrk1d(1, 2), y)
+        Q1 = Int_Simpson(wrk1d(1:jmax, 1), y(1:jmax))
+        Q2 = U2*Int_Simpson(wrk1d(1:jmax, 2), y(1:jmax))
         UC = (-Q2 + sqrt(Q2*Q2 + 4.0_wp*Q1*ExcMom_vi*flux_aux))/2.0_wp/Q1
 
 ! Scaled velocity
@@ -591,6 +587,7 @@ subroutine FLOW_SPATIAL_SCALAR(imax, jmax, prof_loc, &
     use TLAB_TYPES, only: profiles_dt
     use TLAB_CONSTANTS, only: wfile, wp, wi
     use TLAB_PROCS
+    use Integration, only: Int_Simpson
     use PROFILES
     implicit none
 
@@ -608,7 +605,6 @@ subroutine FLOW_SPATIAL_SCALAR(imax, jmax, prof_loc, &
     real(wp) c1, c2
     real(wp) delta, eta, ExcMom_vi, Q1, Z2, ZC, flux_aux
     real(wp) dummy, diam_loc
-    real(wp) SIMPSON_NU
     real(wp) xi_tr, dxi_tr
     integer(wi) i, j
     type(profiles_dt) prof_loc
@@ -666,7 +662,7 @@ subroutine FLOW_SPATIAL_SCALAR(imax, jmax, prof_loc, &
     do j = 1, jmax
         wrk1d(j, 2) = rho_vi(j)*u_vi(j)*(z_vi(j) - Z2)
     end do
-    ExcMom_vi = SIMPSON_NU(jmax, wrk1d(1, 2), y)
+    ExcMom_vi = Int_Simpson(wrk1d(1:jmax, 2), y(1:jmax))
 
     do i = 1, imax
 ! Correction factor varying between 1 at the inflow and jet_z_flux
@@ -679,7 +675,7 @@ subroutine FLOW_SPATIAL_SCALAR(imax, jmax, prof_loc, &
         do j = 1, jmax
             wrk1d(j, 1) = rho(i, j)*u(i, j)*z1(i, j)
         end do
-        Q1 = SIMPSON_NU(jmax, wrk1d(1, 1), y)
+        Q1 = Int_Simpson(wrk1d(1:jmax, 1), y(1:jmax))
         ZC = flux_aux*ExcMom_vi/Q1
         do j = 1, jmax
             z1(i, j) = Z2 + ZC*z1(i, j)

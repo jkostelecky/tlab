@@ -46,6 +46,7 @@ program PARTICLE_INI_TRAJEC
     use TLAB_MPI_VARS, only: ims_pro, ims_npro
     use TLAB_MPI_PROCS
 #endif
+    use Thermodynamics
     use PARTICLE_VARS
     use PARTICLE_ARRAYS
     use PARTICLE_PROCS
@@ -78,7 +79,7 @@ program PARTICLE_INI_TRAJEC
     call TLAB_START()
 
     call IO_READ_GLOBAL(ifile)
-    call THERMO_INITIALIZE()
+    call Thermodynamics_Initialize(ifile)
     call PARTICLE_READ_GLOBAL(ifile)
 
 #ifdef USE_MPI
@@ -95,8 +96,6 @@ program PARTICLE_INI_TRAJEC
 ! -------------------------------------------------------------------
     allocate (wrk1d(isize_wrk1d, inb_wrk1d))
     allocate (wrk2d(isize_wrk2d, 1))
-
-    isize_wrk3d = imax*jmax*kmax
     allocate (wrk3d(isize_wrk3d))
 
     if (part%type == PART_TYPE_BIL_CLOUD_3 .or. part%type == PART_TYPE_BIL_CLOUD_4) then !Allocte memory to read fields

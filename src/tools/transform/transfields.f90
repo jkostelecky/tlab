@@ -18,6 +18,7 @@ program TRANSFIELDS
     use TLAB_MPI_PROCS
 #endif
     use IO_FIELDS
+    use Thermodynamics
     use THERMO_ANELASTIC
     use OPR_FILTERS
     use OPR_INTERPOLATORS
@@ -68,7 +69,7 @@ program TRANSFIELDS
     call TLAB_START
 
     call IO_READ_GLOBAL(ifile)
-    call THERMO_INITIALIZE()
+    call Thermodynamics_Initialize(ifile)
 
 #ifdef USE_MPI
     call TLAB_MPI_INITIALIZE
@@ -266,7 +267,8 @@ program TRANSFIELDS
         inb_txc = 5
         inb_scal_dst = 1
     end select
-    isize_wrk3d = max(isize_txc_field, imax_dst*jmax_dst*kmax_dst)
+    isize_wrk3d = max(isize_wrk3d, isize_txc_field)
+    isize_wrk3d = max(isize_wrk3d, imax_dst*jmax_dst*kmax_dst)
     if (fourier_on) inb_txc = max(inb_txc, 1)
 
     call TLAB_ALLOCATE(C_FILE_LOC)
@@ -382,7 +384,7 @@ program TRANSFIELDS
         idummy = idummy*max(imax, imax_dst)
         isize_txc_field = max(isize_txc_field, idummy)
 #endif
-        isize_wrk3d = isize_txc_field
+        isize_wrk3d = max(isize_wrk3d,isize_txc_field)
 
         deallocate (txc, wrk1d, wrk3d)
         call TLAB_ALLOCATE_ARRAY_DOUBLE(C_FILE_LOC, txc, [isize_txc_field, inb_txc], 'txc')
@@ -506,7 +508,7 @@ program TRANSFIELDS
                             txc_aux(:, 1, k) = txc_aux(:, 1, k) &
                                  + (y_aux(1) - y(subdomain(3), 1))*(txc_aux(:, 2, k) - txc_aux(:, 1, k))/(y(subdomain(3) + 1, 1) - y(subdomain(3), 1))
                             txc_aux(:, jmax_aux, k) = txc_aux(:, jmax_aux - 1, k) &
-    + (y_aux(jmax_aux) - y(subdomain(4) - 1, 1))*(txc_aux(:, jmax_aux, k) - txc_aux(:, jmax_aux - 1, k))/(y(subdomain(4), 1) - y(subdomain(4) - 1, 1))
+                                 + (y_aux(jmax_aux) - y(subdomain(4) - 1, 1))*(txc_aux(:, jmax_aux, k) - txc_aux(:, jmax_aux - 1, k))/(y(subdomain(4), 1) - y(subdomain(4) - 1, 1))
                         end do
                     else
                         call TRANS_EXTEND(imax, jmax, kmax, subdomain, q(:, iq), txc_aux)
@@ -526,7 +528,7 @@ program TRANSFIELDS
                             txc_aux(:, 1, k) = txc_aux(:, 1, k) &
                                  + (y_aux(1) - y(subdomain(3), 1))*(txc_aux(:, 2, k) - txc_aux(:, 1, k))/(y(subdomain(3) + 1, 1) - y(subdomain(3), 1))
                             txc_aux(:, jmax_aux, k) = txc_aux(:, jmax_aux - 1, k) &
-    + (y_aux(jmax_aux) - y(subdomain(4) - 1, 1))*(txc_aux(:, jmax_aux, k) - txc_aux(:, jmax_aux - 1, k))/(y(subdomain(4), 1) - y(subdomain(4) - 1, 1))
+                                 + (y_aux(jmax_aux) - y(subdomain(4) - 1, 1))*(txc_aux(:, jmax_aux, k) - txc_aux(:, jmax_aux - 1, k))/(y(subdomain(4), 1) - y(subdomain(4) - 1, 1))
                         end do
                     else
                         call TRANS_EXTEND(imax, jmax, kmax, subdomain, s(:, is), txc_aux)
@@ -816,8 +818,8 @@ contains
     !########################################################################
     subroutine TRANS_FUNCTION(nx, ny, nz, a, b, txc)
 
-        use THERMO_VARS, only: imixture!, MRATIO, GRATIO, dsmooth
-        use THERMO_VARS, only: rd_ov_rv, Lvl
+        use Thermodynamics, only: imixture
+        use Thermodynamics, only: rd_ov_rv, Lvl
         use THERMO_ANELASTIC, only: pbackground
 
         implicit none
@@ -831,9 +833,7 @@ contains
 
         ! #######################################################################
         imixture = MIXT_TYPE_AIRWATER
-        call THERMO_INITIALIZE()
-        ! MRATIO = 1.0_wp
-        ! dsmooth = 0.0_wp
+        call Thermodynamics_Initialize(ifile)
         inb_scal = 1
 
         qt_0 = 9.0d-3; qt_1 = 1.5d-3
@@ -850,7 +850,7 @@ contains
         call THERMO_ANELASTIC_TEMPERATURE(nx, ny, nz, txc(1, 1), txc(1, 5))
 
         ! Calculate saturation specific humidity
-        call THERMO_POLYNOMIAL_PSAT(nx*ny*nz, txc(1, 5), txc(1, 1))
+        call Thermo_Psat_Polynomial(nx*ny*nz, txc(1, 5), txc(1, 1))
         txc(:, 1) = 1.0_wp/(txc(:, 4)/txc(:, 1) - 1.0_wp)*rd_ov_rv
         txc(:, 1) = txc(:, 1)/(1.0_wp + txc(:, 1))
 
