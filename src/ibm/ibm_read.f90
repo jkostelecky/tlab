@@ -159,7 +159,7 @@ subroutine IBM_READ_CONSISTENCY_CHECK()
     end if
   end if
   if ( nob_max <= 0 ) then
-    call TLAB_WRITE_ASCII(efile, 'IBM_READ_INI. IBM. Too no objects in flow, set number of objects correctly.')
+    call TLAB_WRITE_ASCII(efile, 'IBM_READ_INI. IBM. No objects in flow, set number of objects correctly.')
     call TLAB_STOP(DNS_ERROR_OPTION)
   end if 
   if ( nflu < 2 ) then
