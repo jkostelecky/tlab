@@ -4,27 +4,27 @@ This is a summary of the workflow. The details of each tool and the correspondin
 
 ## Preprocessing Tools
 
-| binary    | inputs                            | outputs |
-| --------- | --------------------------------- | ------- |
-|inigrid.x   | tlab.ini                         | grid |
-|inirand.x   | tlab.ini, grid                      |  [flow,scal].rand.? |        
-|iniflow.x |  tlab.ini, grid [,flow.rand.?]     | flow.ics.?
-|iniscal.x |   tlab.ini, grid [,scal.rand.?]     |    scal.ics.?
+| binary     | inputs                             | outputs            |
+| ---------- | ---------------------------------- | ------------------ |
+| inigrid.x  | tlab.ini                           | grid               |
+| inirand.x  | tlab.ini, grid                     | [flow,scal].rand.? |        
+| iniflow.x  | tlab.ini, grid [,flow.rand.?]      | flow.ics.?         |
+| iniscal.x  | tlab.ini, grid [,scal.rand.?]      | scal.ics.?         |
 
 ## Simulation Tools
 
-| binary    | inputs                            | outputs |
-| --------- | --------------------------------- | ------- |
-|dns.x      |tlab.ini, grid, flow.*.?, scal.*.? |   flow.*.?, scal.*.? |
+| binary     | inputs                             | outputs            |
+| ---------- | ---------------------------------- | ------------------ |
+| dns.x      | tlab.ini, grid, flow.*.?, scal.*.? | flow.*.?, scal.*.? |
 
 ## Postprocessing Tools
 
-| binary    | inputs                            | outputs |
-| --------- | --------------------------------- | ------- |
-|averages.x | tlab.ini, grid, flow.*.?, scal.*.?| avg*
-|pdfs.x     | tlab.ini, grid, flow.*.?, scal.*.?| pdf*
-|spectra.x  | tlab.ini, grid, flow.*.?, scal.*.?| xsp*, zsp*
-|visuals.x  | tlab.ini, grid, flow.*.?, scal.*.?| *variable files* |
+| binary     | inputs                             | outputs            |
+| ---------- | ---------------------------------- | ------------------ |
+| averages.x | tlab.ini, grid, flow.*.?, scal.*.? | avg*               |
+| pdfs.x     | tlab.ini, grid, flow.*.?, scal.*.? | pdf*               |
+| spectra.x  | tlab.ini, grid, flow.*.?, scal.*.? | xsp*, zsp*         |
+| visuals.x  | tlab.ini, grid, flow.*.?, scal.*.? | *variable files*   |
 
 ## List of examples
 
@@ -69,7 +69,11 @@ This is a summary of the workflow. The details of each tool and the correspondin
 * Case34. Case17 (cloud-top), solving liquid equation w/ & w/o diffusion.  
 * Case35. Same as 34, but with a stratified bottom interface.  
 
-### 3D cases
+### Gravity waves
+
+* Case37. Wave maker.
+
+### 3D cases: Ekman flow
 
 * Case41. Neutral Ekman layer without sponge at the top.  
 * Case42. Neutral Ekman layer with sponge at the top.  

@@ -12,10 +12,10 @@ program PDFS
     use TLAB_ARRAYS
     use TLAB_PROCS
 #ifdef USE_MPI
-    use TLAB_MPI_PROCS
+    use TLabMPI_PROCS
 #endif
     use FI_SOURCES, only: bbackground, FI_BUOYANCY
-    use Thermodynamics, only: imixture, Thermodynamics_Initialize
+    use Thermodynamics, only: imixture, Thermodynamics_Initialize_Parameters
     use THERMO_ANELASTIC
     use Radiation
     use Microphysics
@@ -43,7 +43,7 @@ program PDFS
     integer(1), allocatable :: gate(:)
     type(pointers_dt) :: vars(16)
     integer, parameter :: i1 = 1
-    
+
     ! -------------------------------------------------------------------
     ! Local variables
     ! -------------------------------------------------------------------
@@ -85,14 +85,14 @@ program PDFS
     call TLAB_START()
 
     call IO_READ_GLOBAL(ifile)
-    call Thermodynamics_Initialize(ifile)
+#ifdef USE_MPI
+    call TLabMPI_Initialize()
+#endif
+
+    call Thermodynamics_Initialize_Parameters(ifile)
     call Radiation_Initialize(ifile)
     call Microphysics_Initialize(ifile)
     call Chemistry_Initialize(ifile)
-
-#ifdef USE_MPI
-    call TLAB_MPI_INITIALIZE
-#endif
 
     ! -------------------------------------------------------------------
     ! File names
@@ -242,7 +242,7 @@ program PDFS
     allocate (pdf(isize_pdf*(jmax_aux + 1)*nfield))
 
     inb_wrk2d = max(inb_wrk2d, 4)
-    call TLAB_ALLOCATE(C_FILE_LOC)
+    call TLab_Initialize_Memory(C_FILE_LOC)
 
     ! -------------------------------------------------------------------
     ! Initialize
@@ -252,7 +252,7 @@ program PDFS
     call FDM_INITIALIZE(y, g(2), wrk1d)
     call FDM_INITIALIZE(z, g(3), wrk1d)
 
-    call OPR_ELLIPTIC_INITIALIZE()
+    call OPR_Elliptic_Initialize(ifile)
 
     call FI_BACKGROUND_INITIALIZE()  ! Initialize thermodynamic quantities
 
@@ -404,7 +404,7 @@ program PDFS
             ! result vector in txc1, txc2, txc3
             call FI_CURL(imax, jmax, kmax, q(1, 1), q(1, 2), q(1, 3), txc(1, 1), txc(1, 2), txc(1, 3), txc(1, 7))
             ! scalar product, store in txc8
-      txc(1:isize_field,8) = txc(1:isize_field,1)*txc(1:isize_field,4) + txc(1:isize_field,2)*txc(1:isize_field,5) + txc(1:isize_field,3)*txc(1:isize_field,6)
+ txc(1:isize_field, 8) = txc(1:isize_field, 1)*txc(1:isize_field, 4) + txc(1:isize_field, 2)*txc(1:isize_field, 5) + txc(1:isize_field, 3)*txc(1:isize_field, 6)
 
             call FI_VORTICITY_PRODUCTION(imax, jmax, kmax, q(1, 1), q(1, 2), q(1, 3), txc(1, 1), &
                                          txc(1, 2), txc(1, 3), txc(1, 4), txc(1, 5), txc(1, 6))
@@ -469,7 +469,7 @@ program PDFS
         case (5)
             call TLAB_WRITE_ASCII(lfile, 'Computing velocity gradient invariants...')
 
-  call FI_INVARIANT_R(imax, jmax, kmax, q(1, 1), q(1, 2), q(1, 3), txc(1, 1), txc(1, 2), txc(1, 3), txc(1, 4), txc(1, 5), txc(1, 6))
+            call FI_INVARIANT_R(imax, jmax, kmax, q(1, 1), q(1, 2), q(1, 3), txc(1, 1), txc(1, 2), txc(1, 3), txc(1, 4), txc(1, 5), txc(1, 6))
             call FI_INVARIANT_Q(imax, jmax, kmax, q(1, 1), q(1, 2), q(1, 3), txc(1, 2), txc(1, 3), txc(1, 4), txc(1, 5))
             call FI_INVARIANT_P(imax, jmax, kmax, q(1, 1), q(1, 2), q(1, 3), txc(1, 3), txc(1, 4))
 
@@ -581,7 +581,7 @@ program PDFS
         case (11)
             call TLAB_WRITE_ASCII(lfile, 'Computing eigenvalues of Sij...')
 
-     CALL FI_STRAIN_TENSOR(imax,jmax,kmax, q(1,1),q(1,2),q(1,3), txc(1,1),txc(1,2),txc(1,3),txc(1,4),txc(1,5),txc(1,6))
+            call FI_STRAIN_TENSOR(imax, jmax, kmax, q(1, 1), q(1, 2), q(1, 3), txc(1, 1), txc(1, 2), txc(1, 3), txc(1, 4), txc(1, 5), txc(1, 6))
             call TENSOR_EIGENVALUES(imax, jmax, kmax, txc(1, 1), txc(1, 7)) ! txc7-txc9
 
             ifield = ifield + 1; vars(ifield)%field => txc(:, 7); vars(ifield)%tag = 'Lambda1'; ibc(ifield) = 2
@@ -594,7 +594,7 @@ program PDFS
         case (12)
             call TLAB_WRITE_ASCII(lfile, 'Computing eigenframe of Sij...')
 
-     CALL FI_STRAIN_TENSOR(imax,jmax,kmax, q(1,1),q(1,2),q(1,3), txc(1,1),txc(1,2),txc(1,3),txc(1,4),txc(1,5),txc(1,6))
+            call FI_STRAIN_TENSOR(imax, jmax, kmax, q(1, 1), q(1, 2), q(1, 3), txc(1, 1), txc(1, 2), txc(1, 3), txc(1, 4), txc(1, 5), txc(1, 6))
             call TENSOR_EIGENVALUES(imax, jmax, kmax, txc(1, 1), txc(1, 7)) ! txc7-txc9
             call TENSOR_EIGENFRAME(imax, jmax, kmax, txc(1, 1), txc(1, 7)) ! txc1-txc6
             call FI_CURL(imax, jmax, kmax, q(1, 1), q(1, 2), q(1, 3), txc(1, 7), txc(1, 8), txc(1, 9), txc(1, 10))

@@ -11,9 +11,9 @@ program INISCAL
     use TLAB_PROCS
 #ifdef USE_MPI
     use MPI
-    use TLAB_MPI_PROCS
+    use TLabMPI_PROCS
 #endif
-    use Thermodynamics, only: imixture, Thermodynamics_Initialize
+    use Thermodynamics, only: imixture, Thermodynamics_Initialize_Parameters
     use THERMO_AIRWATER
     use THERMO_ANELASTIC
     use Radiation
@@ -29,13 +29,12 @@ program INISCAL
     call TLAB_START()
 
     call IO_READ_GLOBAL(ifile)
-    call Thermodynamics_Initialize(ifile)
+#ifdef USE_MPI
+    call TLabMPI_Initialize()
+#endif
+    call Thermodynamics_Initialize_Parameters(ifile)
     call Radiation_Initialize(ifile)
     call SCAL_READ_LOCAL(ifile)
-
-#ifdef USE_MPI
-    call TLAB_MPI_INITIALIZE
-#endif
 
     if (imode_sim == DNS_MODE_SPATIAL .and. rbg%type == PROFILE_NONE) then
         inb_wrk2d = max(inb_wrk2d, 6)
@@ -45,7 +44,7 @@ program INISCAL
     if (flag_s == PERT_LAYER_BROADBAND) inb_txc = max(inb_txc, 1)
     if (infraredProps%type /= EQNS_NONE) inb_txc = max(inb_txc, 4)
 
-    call TLAB_ALLOCATE(C_FILE_LOC)
+    call TLab_Initialize_Memory(C_FILE_LOC)
 
     call IO_READ_GRID(gfile, g(1)%size, g(2)%size, g(3)%size, g(1)%scale, g(2)%scale, g(3)%scale, x, y, z, area)
     call FDM_INITIALIZE(x, g(1), wrk1d)
@@ -97,11 +96,8 @@ program INISCAL
     ! ###################################################################
     ! Initial radiation effect as an accumulation during a certain interval of time
     if (infraredProps%type /= EQNS_NONE .and. norm_ini_radiation /= 0.0_wp) then
-
-        if (abs(infraredProps%parameters(1)) > 0.0_wp) then
-            infraredProps%parameters(3) = infraredProps%parameters(3)/infraredProps%parameters(1)*norm_ini_radiation
-        end if
-        infraredProps%parameters(1) = norm_ini_radiation
+        norm_ini_radiation = norm_ini_radiation/infraredProps%auxiliar(1)
+        infraredProps%auxiliar(:) = infraredProps%auxiliar(:)*norm_ini_radiation
         if (imixture == MIXT_TYPE_AIRWATER .and. damkohler(3) <= 0.0_wp) then ! Calculate q_l
             call THERMO_ANELASTIC_PH(imax, jmax, kmax, s(1, 2), s(1, 1))
         else if (imixture == MIXT_TYPE_AIRWATER_LINEAR) then

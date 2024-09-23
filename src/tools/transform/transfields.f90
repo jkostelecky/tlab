@@ -14,8 +14,8 @@ program TRANSFIELDS
     use TLAB_ARRAYS
     use TLAB_PROCS
 #ifdef USE_MPI
-    use TLAB_MPI_VARS, only: ims_npro_i, ims_npro_k
-    use TLAB_MPI_PROCS
+    use TLabMPI_VARS, only: ims_npro_i, ims_npro_k
+    use TLabMPI_PROCS
 #endif
     use IO_FIELDS
     use Thermodynamics
@@ -69,10 +69,10 @@ program TRANSFIELDS
     call TLAB_START
 
     call IO_READ_GLOBAL(ifile)
-    call Thermodynamics_Initialize(ifile)
+    call Thermodynamics_Initialize_Parameters(ifile)
 
 #ifdef USE_MPI
-    call TLAB_MPI_INITIALIZE
+    call TLabMPI_Initialize()
 #endif
 
     ! -------------------------------------------------------------------
@@ -271,7 +271,7 @@ program TRANSFIELDS
     isize_wrk3d = max(isize_wrk3d, imax_dst*jmax_dst*kmax_dst)
     if (fourier_on) inb_txc = max(inb_txc, 1)
 
-    call TLAB_ALLOCATE(C_FILE_LOC)
+    call TLab_Initialize_Memory(C_FILE_LOC)
 
     call IO_READ_GRID(gfile, g(1)%size, g(2)%size, g(3)%size, g(1)%scale, g(2)%scale, g(3)%scale, x, y, z, area)
     call FDM_INITIALIZE(x, g(1), wrk1d)
@@ -833,7 +833,7 @@ contains
 
         ! #######################################################################
         imixture = MIXT_TYPE_AIRWATER
-        call Thermodynamics_Initialize(ifile)
+        call Thermodynamics_Initialize_Parameters(ifile)
         inb_scal = 1
 
         qt_0 = 9.0d-3; qt_1 = 1.5d-3
