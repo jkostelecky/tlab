@@ -100,17 +100,18 @@ program AVERAGES
     call TLabMPI_Initialize()
 #endif
     call Thermodynamics_Initialize_Parameters(ifile)
+    call Particle_Initialize_Parameters(ifile)
+
     call Radiation_Initialize(ifile)
     call Microphysics_Initialize(ifile)
     call Chemistry_Initialize(ifile)
-    call Particle_Initialize_Parameters(ifile)
 
     ! -------------------------------------------------------------------
     call SCANINICHAR(bakfile, ifile, 'IBMParameter', 'Status', 'off', sRes)
     if (trim(adjustl(sRes)) == 'off') then; imode_ibm = 0
     else if (trim(adjustl(sRes)) == 'on') then; imode_ibm = 1
     else
-        call TLAB_WRITE_ASCII(efile, 'VISUALS. Wrong IBM Status option.')
+        call TLAB_WRITE_ASCII(efile, 'AVERAGES. Wrong IBM Status option.')
         call TLAB_STOP(DNS_ERROR_OPTION)
     end if
 
