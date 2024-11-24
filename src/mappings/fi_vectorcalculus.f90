@@ -1,8 +1,8 @@
 #include "dns_const.h"
 
 module FI_VECTORCALCULUS
-    use TLAB_CONSTANTS
-    use TLAB_VARS, only: g
+    use TLab_Constants, only: wp, wi, BCS_NN
+    use FDM, only: g
     use IBM_VARS, only: imode_ibm, ibm_partial
     use OPR_PARTIAL
     implicit none
@@ -70,7 +70,7 @@ contains
 !#
 !########################################################################
     subroutine FI_SOLENOIDAL(nx, ny, nz, u, v, w, tmp1, tmp2, tmp3)
-        use TLAB_POINTERS_3D, only: p_wrk2d
+        use TLab_Pointers_3D, only: p_wrk2d
         use OPR_ELLIPTIC
 
         integer(wi), intent(IN) :: nx, ny, nz
@@ -89,14 +89,6 @@ contains
         call FI_INVARIANT_P(nx, ny, nz, u, v, w, tmp1, tmp2)
 
         p_wrk2d(:, :, 1:2) = 0.0_wp  ! bcs
-        ! select case (imode_elliptic)
-        ! case (FDM_COM6_JACOBIAN)
-        !     call OPR_Poisson_FourierXZ_Factorize(nx, ny, nz, g, BCS_NN, tmp1, tmp2, tmp3, p_wrk2d(:, :, 1), p_wrk2d(:, :, 2))
-
-        ! case (FDM_COM4_DIRECT, FDM_COM6_DIRECT)
-        !     call OPR_Poisson_FourierXZ_Direct(nx, ny, nz, g, BCS_NN, tmp1, tmp2, tmp3, p_wrk2d(:, :, 1), p_wrk2d(:, :, 2))
-        
-        ! end select
         call OPR_Poisson(nx, ny, nz, g, BCS_NN, tmp1, tmp2, tmp3, p_wrk2d(:, :, 1), p_wrk2d(:, :, 2))
 
 ! -------------------------------------------------------------------

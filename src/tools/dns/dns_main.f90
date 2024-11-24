@@ -3,10 +3,12 @@
 
 program DNS
 
-    use TLAB_CONSTANTS
+    use TLab_Constants, only: ifile, efile, wfile, lfile, gfile, tag_flow, tag_scal, tag_part, tag_traj
     use TLAB_VARS
-    use TLAB_ARRAYS
-    use TLAB_PROCS
+    use FDM, only: g,  FDM_Initialize
+    use TLab_Arrays
+    use TLab_WorkFlow, only: TLab_Write_ASCII, TLab_Stop, TLab_Start
+    use TLab_Memory, only: TLab_Initialize_Memory, TLab_Allocate_Real
 #ifdef USE_MPI
     use TLabMPI_PROCS
 #endif
@@ -27,13 +29,14 @@ program DNS
     use BOUNDARY_INFLOW
     use BOUNDARY_BUFFER
     use BOUNDARY_BCS
-    use STATISTICS
+    use DNS_STATISTICS, only: DNS_STATISTICS_INITIALIZE, DNS_STATISTICS_SPATIAL, DNS_STATISTICS_TEMPORAL, mean_flow, mean_scal
     use ParticleTrajectories
     use AVG_SCAL_ZT
     use IO_FIELDS
     use OPR_ELLIPTIC
     use OPR_FILTERS
     use OPR_FOURIER
+    use AVG_PHASE
     implicit none
     save
 
@@ -43,24 +46,26 @@ program DNS
     integer, parameter :: i0 = 0, i1 = 1
 
     ! ###################################################################
-    call TLAB_START()
+    call SYSTEM_CLOCK(start_clock)
+    call TLab_Start()
 
-    call IO_READ_GLOBAL(ifile)
+    call TLab_Initialize_Parameters(ifile)
 #ifdef USE_MPI
     call TLabMPI_Initialize()
 #endif
-    call Thermodynamics_Initialize_Parameters(ifile)
     call Particle_Initialize_Parameters(ifile)
     call IBM_READ_INI(ifile)
     if (imode_ibm == 1) then
         call IBM_READ_CONSISTENCY_CHECK()
     end if
 
+    call NavierStokes_Initialize_Parameters(ifile)
+    call Thermodynamics_Initialize_Parameters(ifile)
     call Radiation_Initialize(ifile)
     call Microphysics_Initialize(ifile)
     call Chemistry_Initialize(ifile)
 
-    ! call TLab_Consistency_Check() ! TBD
+    call TLab_Consistency_Check()
 
     call DNS_READ_LOCAL(ifile)
 #ifdef USE_PSFFT
@@ -72,25 +77,29 @@ program DNS
     ! #######################################################################
     call TLab_Initialize_Memory(__FILE__)
 
-    call IO_READ_GRID(gfile, g(1)%size, g(2)%size, g(3)%size, g(1)%scale, g(2)%scale, g(3)%scale, x, y, z, area)
-    call FDM_INITIALIZE(x, g(1), wrk1d)
-    call FDM_INITIALIZE(y, g(2), wrk1d)
-    call FDM_INITIALIZE(z, g(3), wrk1d)
+    call IO_READ_GRID(gfile, g(1)%size, g(2)%size, g(3)%size, g(1)%scale, g(2)%scale, g(3)%scale, wrk1d(:,1), wrk1d(:,2), wrk1d(:,3))
+    call FDM_Initialize(x, g(1), wrk1d(:,1), wrk1d(:,4))
+    call FDM_Initialize(y, g(2), wrk1d(:,2), wrk1d(:,4))
+    call FDM_Initialize(z, g(3), wrk1d(:,3), wrk1d(:,4))
 
     call SpecialForcing_Initialize(ifile)
 
-    call FI_BACKGROUND_INITIALIZE()
+    call TLab_Initialize_Background()
 
-    call TLAB_ALLOCATE_ARRAY_DOUBLE(__FILE__, hq, [isize_field, inb_flow], 'flow-rhs')
-    call TLAB_ALLOCATE_ARRAY_DOUBLE(__FILE__, hs, [isize_field, inb_scal], 'scal-rhs')
+    call TLab_Allocate_Real(__FILE__, hq, [isize_field, inb_flow], 'flow-rhs')
+    call TLab_Allocate_Real(__FILE__, hs, [isize_field, inb_scal], 'scal-rhs')
 
     call ParticleTrajectories_Initialize(ifile)
     call Particle_Initialize_Memory(__FILE__)
-    call TLAB_ALLOCATE_ARRAY_DOUBLE(__FILE__, l_hq, [isize_part, inb_part], 'part-rhs')
+    call TLab_Allocate_Real(__FILE__, l_hq, [isize_part, inb_part], 'part-rhs')
 
-    call STATISTICS_INITIALIZE()
+    call DNS_STATISTICS_INITIALIZE()
 
     call PLANES_INITIALIZE()
+
+    if (PhAvg%active) then
+        call AvgPhaseInitializeMemory(__FILE__, nitera_save)
+    end if
 
     if (use_tower) then
         call DNS_TOWER_INITIALIZE(tower_stride)
@@ -149,7 +158,7 @@ program DNS
     flag_viscosity = .false.
     if (visc /= visc_stop) then
         write (str, *) visc
-        call TLAB_WRITE_ASCII(lfile, 'Changing original viscosity '//trim(adjustl(str))//' to new value.')
+        call TLab_Write_ASCII(lfile, 'Changing original viscosity '//trim(adjustl(str))//' to new value.')
         if (visc_time > 0.0_wp) then
             visc_rate = (visc_stop - visc)/visc_time
             visc_time = rtime + visc_time                 ! Stop when this time is reached
@@ -215,17 +224,14 @@ program DNS
     itime = nitera_first
 
     write (str, *) itime
-    call TLAB_WRITE_ASCII(lfile, 'Starting time integration at It'//trim(adjustl(str))//'.')
+    call TLab_Write_ASCII(lfile, 'Starting time integration at It'//trim(adjustl(str))//'.')
 
     do
         if (itime >= nitera_last) exit
         if (int(logs_data(1)) /= 0) exit
-
         call TIME_RUNGEKUTTA()
-
         itime = itime + 1
         rtime = rtime + dtime
-
         if (mod(itime - nitera_first, nitera_filter) == 0) then
             call DNS_FILTER()
             if (imode_ibm == 1) then
@@ -255,26 +261,40 @@ program DNS
                 call DNS_OBS()
             end if
         end if
+        
+        if (PhAvg%active) then
+            if (mod(itime, PhAvg%stride) == 0) then
+                call AvgPhaseSpace(wrk2d, inb_flow, itime/PhAvg%stride, nitera_first, nitera_save/PhAvg%stride, 1)
+                call AvgPhaseSpace(wrk2d, inb_scal, itime/PhAvg%stride, nitera_first, nitera_save/PhAvg%stride, 2)
+                ! Pressure is taken from the RHS subroutine
+                ! call AvgPhaseSpace(wrk2d, 6       , itime/PhAvg%stride, nitera_first, nitera_save/PhAvg%stride, 8)
+                call AvgPhaseStress(q, itime/PhAvg%stride, nitera_first, nitera_save/PhAvg%stride)
+                if (mod(itime - nitera_first, nitera_save) == 0) then
+                    call IO_Write_AvgPhase(avg_planes, inb_flow, IO_FLOW, nitera_save, PhAvg%stride, avgu_name  , 1, avg_flow)
+                    call IO_Write_AvgPhase(avg_planes, inb_scal, IO_SCAL, nitera_save, PhAvg%stride, avgs_name  , 2, avg_scal)
+                    call IO_Write_AvgPhase(avg_planes, 1       , IO_SCAL, nitera_save, PhAvg%stride, avgp_name  , 4, avg_p)
+                    call IO_Write_AvgPhase(avg_planes, 6       , IO_FLOW, nitera_save, PhAvg%stride, avgstr_name, 8, avg_stress)
+
+                    call AvgPhaseResetVariable()
+                end if
+            end if
+        end if
 
         if (use_tower) then
             call DNS_TOWER_ACCUMULATE(q, 1, wrk1d)
             call DNS_TOWER_ACCUMULATE(s, 2, wrk1d)
         end if
-
         if (imode_traj /= TRAJ_TYPE_NONE) then
             call ParticleTrajectories_Accumulate()
         end if
-
         if (mod(itime - nitera_first, nitera_stats_spa) == 0) then  ! Accumulate statistics in spatially evolving cases
             if (flow_on) call AVG_FLOW_ZT_REDUCE(q, hq, txc, mean_flow)
             if (scal_on) call AVG_SCAL_ZT_REDUCE(q, s, hq, txc, mean_scal)
         end if
-
         if (mod(itime - nitera_first, nitera_stats) == 0) then      ! Calculate statistics
-            if (imode_sim == DNS_MODE_TEMPORAL) call STATISTICS_TEMPORAL()
-            if (imode_sim == DNS_MODE_SPATIAL) call STATISTICS_SPATIAL()
+            if (imode_sim == DNS_MODE_TEMPORAL) call DNS_STATISTICS_TEMPORAL()
+            if (imode_sim == DNS_MODE_SPATIAL) call DNS_STATISTICS_SPATIAL()
         end if
-
         if (mod(itime - nitera_first, nitera_save) == 0 .or. &      ! Check-pointing: Save restart files
             itime == nitera_last .or. int(logs_data(1)) /= 0 .or. & ! Secure that one restart file is saved
             wall_time > nruntime_sec) then                          ! If max runtime of the code is reached
@@ -313,17 +333,16 @@ program DNS
             call PLANES_SAVE()
         end if
 
-        if (wall_time > nruntime_sec) then
+        if (wall_time > nruntime_sec) then 
             write (str, *) wall_time
             ! write to efile so that job is not resubmitted
-            call TLAB_WRITE_ASCII(efile, 'Maximum walltime of '//trim(adjustl(str))//' seconds is reached.')
+            call TLab_Write_ASCII(efile, 'Maximum walltime of '//trim(adjustl(str))//' seconds is reached.')
             exit
         end if
-
     end do
 
     ! ###################################################################
-    call TLAB_STOP(int(logs_data(1)))
+    call TLab_Stop(int(logs_data(1)))
 
 contains
 
@@ -338,8 +357,8 @@ contains
 
         select case (env_status)
         case (-1)
-            call TLAB_WRITE_ASCII(efile, "DNS_START. The environment variable  is too long and cannot be handled in the foreseen array.")
-            call TLAB_STOP(DNS_ERROR_OPTION)
+            call TLab_Write_ASCII(efile, "DNS_START. The environment variable  is too long and cannot be handled in the foreseen array.")
+            call TLab_Stop(DNS_ERROR_OPTION)
         case (0)
             if (.not. logger_path(path_len:path_len) == '/') then
                 logger_path = trim(adjustl(logger_path))//'/'
@@ -405,9 +424,9 @@ contains
         end if
 
         line1 = line1(1:ip - 1)//'#'
-        call TLAB_WRITE_ASCII(ofile, repeat('#', len_trim(line1)))
-        call TLAB_WRITE_ASCII(ofile, trim(adjustl(line1)))
-        call TLAB_WRITE_ASCII(ofile, repeat('#', len_trim(line1)))
+        call TLab_Write_ASCII(ofile, repeat('#', len_trim(line1)))
+        call TLab_Write_ASCII(ofile, trim(adjustl(line1)))
+        call TLab_Write_ASCII(ofile, repeat('#', len_trim(line1)))
 
     end subroutine DNS_LOGS_INITIALIZE
 
@@ -450,7 +469,7 @@ contains
             line1 = trim(line1)//trim(line2)
         end if
 
-        call TLAB_WRITE_ASCII(ofile, trim(adjustl(line1)))
+        call TLab_Write_ASCII(ofile, trim(adjustl(line1)))
 
     end subroutine DNS_LOGS
 
@@ -489,9 +508,9 @@ contains
         end select
 
         line1 = line1(1:ip - 1)//'#'
-        call TLAB_WRITE_ASCII(vfile, repeat('#', len_trim(line1)))
-        call TLAB_WRITE_ASCII(vfile, trim(adjustl(line1)))
-        call TLAB_WRITE_ASCII(vfile, repeat('#', len_trim(line1)))
+        call TLab_Write_ASCII(vfile, repeat('#', len_trim(line1)))
+        call TLab_Write_ASCII(vfile, trim(adjustl(line1)))
+        call TLab_Write_ASCII(vfile, repeat('#', len_trim(line1)))
 
     end subroutine DNS_OBS_INITIALIZE
 
@@ -521,7 +540,7 @@ contains
             end if
         end select
 
-        call TLAB_WRITE_ASCII(vfile, trim(adjustl(line1)))
+        call TLab_Write_ASCII(vfile, trim(adjustl(line1)))
 
     end subroutine DNS_OBS
 

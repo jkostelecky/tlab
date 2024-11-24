@@ -17,19 +17,22 @@ subroutine RHS_GLOBAL_INCOMPRESSIBLE_1()
     use OMP_LIB
 #endif
 #ifdef TRACE_ON
-    use TLAB_CONSTANTS, only: tfile
+    use TLab_Constants, only: tfile
 #endif
-    use TLAB_CONSTANTS, only: wp, wi, BCS_NN
+    use TLab_Constants, only: wp, wi, BCS_NN
     use TLAB_VARS, only: imode_eqns
     use TLAB_VARS, only: imax, jmax, kmax, isize_field
-    use TLAB_VARS, only: g
+    use FDM, only: g
     use TLAB_VARS, only: PressureFilter, stagger_on
-    use TLAB_ARRAYS
-    use TLAB_POINTERS, only: u, v, w, tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7, tmp8, tmp9
+    use TLAB_VARS, only: itime
+    use TLab_Arrays
+    use TLab_Pointers, only: u, v, w, tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7, tmp8, tmp9
     use THERMO_ANELASTIC
+    use TLab_OpenMP
     use DNS_ARRAYS
     use DNS_LOCAL, only: remove_divergence
     use DNS_LOCAL, only: use_tower
+    use DNS_LOCAL, only: nitera_first, nitera_save
     use TIME, only: rkm_substep, rkm_endstep, dte
     use DNS_TOWER
     use BOUNDARY_BUFFER
@@ -39,6 +42,7 @@ subroutine RHS_GLOBAL_INCOMPRESSIBLE_1()
     use OPR_BURGERS
     use OPR_ELLIPTIC
     use OPR_FILTERS
+    use AVG_PHASE
 
     implicit none
 
@@ -56,7 +60,7 @@ subroutine RHS_GLOBAL_INCOMPRESSIBLE_1()
 #endif
 
 #ifdef TRACE_ON
-    call TLAB_WRITE_ASCII(tfile, 'ENTERING SUBROUTINE RHS_GLOBAL_INCOMPRESSIBLE_1')
+    call TLab_Write_ASCII(tfile, 'ENTERING SUBROUTINE RHS_GLOBAL_INCOMPRESSIBLE_1')
 #endif
 
     ! #######################################################################
@@ -101,7 +105,7 @@ subroutine RHS_GLOBAL_INCOMPRESSIBLE_1()
 
 !$omp parallel default( shared ) &
 !$omp private( ij, srt,end,siz )
-    call DNS_OMP_PARTITION(isize_field, srt, end, siz)
+    call TLab_OMP_PARTITION(isize_field, srt, end, siz)
     do ij = srt, end
         hq(ij, 1) = hq(ij, 1) + tmp1(ij) + tmp7(ij) + tmp8(ij)
     end do
@@ -113,7 +117,7 @@ subroutine RHS_GLOBAL_INCOMPRESSIBLE_1()
 
 !$omp parallel default( shared ) &
 !$omp private( ij, srt,end,siz )
-    call DNS_OMP_PARTITION(isize_field, srt, end, siz)
+    call TLab_OMP_PARTITION(isize_field, srt, end, siz)
     do ij = srt, end
         hq(ij, 2) = hq(ij, 2) + tmp2(ij) + tmp7(ij) + tmp8(ij)
     end do
@@ -125,7 +129,7 @@ subroutine RHS_GLOBAL_INCOMPRESSIBLE_1()
 
 !$omp parallel default( shared ) &
 !$omp private( ij, srt,end,siz )
-    call DNS_OMP_PARTITION(isize_field, srt, end, siz)
+    call TLab_OMP_PARTITION(isize_field, srt, end, siz)
     do ij = srt, end
         hq(ij, 3) = hq(ij, 3) + tmp3(ij) + tmp7(ij) + tmp8(ij)
     end do
@@ -149,7 +153,7 @@ subroutine RHS_GLOBAL_INCOMPRESSIBLE_1()
 
 !$omp parallel default( shared ) &
 !$omp private( ij, srt,end,siz )
-        call DNS_OMP_PARTITION(isize_field, srt, end, siz)
+        call TLab_OMP_PARTITION(isize_field, srt, end, siz)
         do ij = srt, end
             hs(ij, is) = hs(ij, is) + tmp1(ij) + tmp2(ij) + tmp3(ij)
         end do
@@ -180,7 +184,7 @@ subroutine RHS_GLOBAL_INCOMPRESSIBLE_1()
 !$omp private( ij,   dummy, srt,end,siz )
 #endif
 
-        call DNS_OMP_PARTITION(isize_field, srt, end, siz)
+        call TLab_OMP_PARTITION(isize_field, srt, end, siz)
         dummy = 1.0_wp/dte
 
 #ifdef USE_ESSL
@@ -249,7 +253,7 @@ subroutine RHS_GLOBAL_INCOMPRESSIBLE_1()
 
     ! -----------------------------------------------------------------------
 !$omp parallel default( shared ) private( ij,srt,end,siz )
-    call DNS_OMP_PARTITION(isize_field, srt, end, siz)
+    call TLab_OMP_PARTITION(isize_field, srt, end, siz)
     do ij = srt, end
         tmp1(ij) = tmp1(ij) + tmp2(ij) + tmp3(ij) ! forcing term in tmp1
     end do
@@ -292,13 +296,17 @@ subroutine RHS_GLOBAL_INCOMPRESSIBLE_1()
     end if
 
     ! Saving pressure for towers to tmp array
-    if (use_tower .and. rkm_substep == rkm_endstep) then
-        if (stagger_on) then ! Stagger pressure field back on velocity grid (only for towers)
+    if (rkm_substep == rkm_endstep) then
+        if (stagger_on .and. ( use_tower .or. PhAvg%active )) then ! Stagger pressure field back on velocity grid (only for towers)
             call OPR_PARTIAL_Z(OPR_P0_INT_PV, imax, jmax, kmax, bcs, g(3), tmp1, tmp5)
             call OPR_PARTIAL_X(OPR_P0_INT_PV, imax, jmax, kmax, bcs, g(1), tmp5, tmp4)
+        endif
+        if ( use_tower ) &
             call DNS_TOWER_ACCUMULATE(tmp4, 4, wrk1d)
-        else
-            call DNS_TOWER_ACCUMULATE(tmp1, 4, wrk1d)
+        if ( PhAvg%active) then   
+            if (mod((itime+1),PhAvg%stride) == 0)  then
+                call AvgPhaseSpace(wrk2d, 1, (itime+1)/PhAvg%stride, nitera_first, nitera_save/PhAvg%stride, tmp4)
+            end if
         end if
     end if
 
@@ -334,7 +342,7 @@ subroutine RHS_GLOBAL_INCOMPRESSIBLE_1()
 !$omp parallel default( shared ) &
 !$omp private( ij,   srt,end,siz,dummy )
 #endif
-        call DNS_OMP_PARTITION(isize_field, srt, end, siz)
+        call TLab_OMP_PARTITION(isize_field, srt, end, siz)
 
 #ifdef USE_ESSL
         ilen = siz
@@ -396,7 +404,7 @@ subroutine RHS_GLOBAL_INCOMPRESSIBLE_1()
     end do
 
 #ifdef TRACE_ON
-    call TLAB_WRITE_ASCII(tfile, 'LEAVING SUBROUTINE RHS_GLOBAL_INCOMPRESSIBLE_1')
+    call TLab_Write_ASCII(tfile, 'LEAVING SUBROUTINE RHS_GLOBAL_INCOMPRESSIBLE_1')
 #endif
 
     return
