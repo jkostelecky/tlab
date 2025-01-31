@@ -2,7 +2,7 @@
 #include "dns_error.h"
 
 module SpecialForcing
-    use TLab_Constants, only: wp, wi, pi_wp, efile, MAX_PARS
+    use TLab_Constants, only: wp, wi, pi_wp, efile, lfile, MAX_PARS
     use TLab_Types, only: term_dt
     use FDM, only: grid_dt
     use TLab_WorkFlow, only: TLab_Write_ASCII, TLab_Stop
@@ -21,9 +21,8 @@ module SpecialForcing
     !     real(wp) auxiliar(MAX_PARS)
     !     real(wp) vector(3)
     ! end type term_dt
-    type(term_dt) :: forcingProps              ! Forcing parameters
+    type(term_dt), public, protected :: forcingProps              ! Forcing parameters
 
-    public :: forcingProps
     public :: SpecialForcing_Initialize
     public :: SpecialForcing_Source
     ! public :: Forcing_Sinusoidal, Forcing_Sinusoidal_NoSlip ! tbd
@@ -51,13 +50,16 @@ contains
     !########################################################################
     subroutine SpecialForcing_Initialize(inifile)
         use TLAB_VARS, only: imax, jmax, kmax
+#ifdef USE_MPI
+        use TLabMPI_VARS, only: ims_offset_i, ims_offset_k
+#endif
         use FDM, only: g
         character(len=*), intent(in) :: inifile
 
         ! -------------------------------------------------------------------
         character(len=32) bakfile, block
         character(len=512) sRes
-        integer(wi) idummy, i, j, k, iwave
+        integer(wi) idummy, i, j, k, iwave, idsp, kdsp
         real(wp) :: dummy(MAX_PARS)
 
         real(wp), pointer :: p_envelope(:, :, :) => null(), p_phase(:, :, :) => null()
@@ -84,21 +86,27 @@ contains
             call TLab_Stop(DNS_ERROR_OPTION)
         end if
 
-        forcingProps%active(:) = .false.
+        forcingProps%vector(:) = 0.0_wp; forcingProps%active(:) = .false.
         if (forcingProps%type /= EQNS_NONE) then
-            forcingProps%active(1:3) = .true.       ! default is active in x, y, z momentum equations
+            call ScanFile_Char(bakfile, inifile, block, 'Vector', '1.0, 0.0, 0.0', sRes)
+            idummy = 3
+            call LIST_REAL(sRes, idummy, forcingProps%vector)
+
+            if (abs(forcingProps%vector(1)) > 0.0_wp) then; forcingProps%active(1) = .true.; call TLab_Write_ASCII(lfile, 'Forcing along Ox.'); end if
+            if (abs(forcingProps%vector(2)) > 0.0_wp) then; forcingProps%active(2) = .true.; call TLab_Write_ASCII(lfile, 'Forcing along Oy.'); end if
+            if (abs(forcingProps%vector(3)) > 0.0_wp) then; forcingProps%active(3) = .true.; call TLab_Write_ASCII(lfile, 'Forcing along Oz.'); end if
 
             forcingProps%parameters(:) = 0.0_wp
             call ScanFile_Char(bakfile, inifile, block, 'Parameters', '1.0, 1.0, 0.0', sRes)
             idummy = MAX_PARS
             call LIST_REAL(sRes, idummy, forcingProps%parameters)
 
-            call ScanFile_Char(bakfile, inifile, block, 'Vector', '0.0,1.0,0.0', sRes)
-            idummy = 3
-            call LIST_REAL(sRes, idummy, forcingProps%vector)
-
             select case (forcingProps%type)
+            case (TYPE_HOMOGENEOUS)
+
             case (TYPE_WAVEMAKER)
+                forcingProps%active(1:3) = .true.       ! default is active in x, y, z momentum equations
+
                 do nwaves = 1, nwaves_max
                     write (sRes, *) nwaves
                     call ScanFile_Char(bakfile, inifile, block, 'Wave'//trim(adjustl(sRes)), 'void', sRes)
@@ -140,13 +148,18 @@ contains
 
         select case (forcingProps%type)
         case (TYPE_WAVEMAKER)
+#ifdef USE_MPI
+            idsp = ims_offset_i; kdsp = ims_offset_k
+#else
+            idsp = 0; kdsp = 0
+#endif
             p_envelope(1:imax, 1:jmax, 1:kmax) => tmp_envelope(1:imax*jmax*kmax, 1)
             p_phase(1:imax, 1:jmax, 1:nwaves) => tmp_phase(1:imax*jmax*nwaves, 1)
 
             dummy(1) = 0.5_wp/envelope(4)**2.0_wp
-            wrk1d(1:imax, 1) = g(1)%nodes(1:imax) - envelope(1)
+            wrk1d(1:imax, 1) = g(1)%nodes(idsp + 1:idsp + imax) - envelope(1)
             wrk1d(1:jmax, 2) = g(2)%nodes(1:jmax) - envelope(2)
-            wrk1d(1:kmax, 3) = g(3)%nodes(1:kmax) - envelope(3)
+            wrk1d(1:kmax, 3) = g(3)%nodes(kdsp + 1:kdsp + kmax) - envelope(3)
             do k = 1, kmax
                 do j = 1, jmax
                     do i = 1, imax
@@ -191,13 +204,13 @@ contains
         select case (locProps%type)
 
         case (TYPE_HOMOGENEOUS)
-            tmp = locProps%parameters(1)
+            tmp(:, :) = locProps%parameters(1)
 
         case (TYPE_RAND_MULTIPLICATIVE)
             call random_number(tmp)
 
-            tmp = (tmp*2.0_wp - 1.0_wp)*locProps%parameters(1)
-            tmp = tmp*h
+            tmp(:, :) = (tmp(:, :)*2.0_wp - 1.0_wp)*locProps%parameters(1)
+            tmp(:, :) = tmp(:, :)*h(:, :)
 
         case (TYPE_SINUSOIDAL)
 

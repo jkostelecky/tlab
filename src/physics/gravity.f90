@@ -8,14 +8,14 @@
 module Gravity
     use TLab_Constants, only: wp, wi, small_wp, efile, lfile, wfile, MAX_PROF
     use TLab_Types, only: term_dt
-    use TLAB_VARS, only: inb_scal, inb_scal_array
+    use TLAB_VARS, only: inb_scal, inb_scal_array, inb_flow, inb_flow_array
     use TLAB_VARS, only: froude
     use TLab_WorkFlow, only: TLab_Write_ASCII, TLab_Stop
     implicit none
     private
 
-    type(term_dt) :: buoyancy
-    real(wp), allocatable :: bbackground(:)
+    type(term_dt), public, protected :: buoyancy
+    real(wp), allocatable, public :: bbackground(:)
 
     ! integer, parameter :: EQNS_BOD_HOMOGENEOUS = 5
     ! integer, parameter :: EQNS_BOD_LINEAR = 6
@@ -24,7 +24,6 @@ module Gravity
     ! integer, parameter :: EQNS_BOD_NORMALIZEDMEAN = 9
     ! integer, parameter :: EQNS_BOD_SUBTRACTMEAN = 10
 
-    public :: buoyancy, bbackground
     public :: Gravity_Initialize
     public :: Gravity_Hydrostatic_Enthalpy
     public :: Gravity_Buoyancy, Gravity_Buoyancy_Source
@@ -42,7 +41,10 @@ contains
 
         !########################################################################
         bakfile = trim(adjustl(inifile))//'.bak'
-        block = 'BodyForce'         ! to be called Gravity?
+        block = 'Gravity'
+
+        call ScanFile_Char(bakfile, inifile, block, 'Vector', 'void', sRes)                             ! backwards compatibility, to be removed
+        if (trim(adjustl(sRes)) == 'void') block = 'BodyForce'
 
         call TLab_Write_ASCII(bakfile, '#')
         call TLab_Write_ASCII(bakfile, '#['//trim(adjustl(block))//']')
@@ -52,7 +54,7 @@ contains
 
         call ScanFile_Char(bakfile, inifile, block, 'Type', 'None', sRes)
         if (trim(adjustl(sRes)) == 'none') &
-            call ScanFile_Char(bakfile, inifile, 'Main', 'TermBodyForce', 'none', sRes)               ! backwards compatibility, to be removed
+            call ScanFile_Char(bakfile, inifile, 'Main', 'TermBodyForce', 'none', sRes)                 ! backwards compatibility, to be removed
         if (trim(adjustl(sRes)) == 'none') then; buoyancy%type = EQNS_NONE
         else if (trim(adjustl(sRes)) == 'explicit') then; buoyancy%type = EQNS_EXPLICIT
         else if (trim(adjustl(sRes)) == 'homogeneous') then; buoyancy%type = EQNS_BOD_HOMOGENEOUS
@@ -71,28 +73,31 @@ contains
             buoyancy%type = EQNS_NONE
         end if
 
-        buoyancy%vector = 0.0_wp; buoyancy%active = .false.
+        buoyancy%vector = 0.0_wp
+        call ScanFile_Char(bakfile, inifile, block, 'Vector', '0.0,0.0,0.0', sRes)
+        idummy = 3
+        call LIST_REAL(sRes, idummy, buoyancy%vector)
+
+        buoyancy%active = .false.
+        if (abs(buoyancy%vector(1)) > 0.0_wp) then; buoyancy%active(1) = .true.; call TLab_Write_ASCII(lfile, 'Gravity along Ox.'); end if
+        if (abs(buoyancy%vector(2)) > 0.0_wp) then; buoyancy%active(2) = .true.; call TLab_Write_ASCII(lfile, 'Gravity along Oy.'); end if
+        if (abs(buoyancy%vector(3)) > 0.0_wp) then; buoyancy%active(3) = .true.; call TLab_Write_ASCII(lfile, 'Gravity along Oz.'); end if
+
+        if (froude > 0.0_wp) then
+            buoyancy%vector(:) = buoyancy%vector(:)/froude ! adding the froude number into the vector g
+        else
+            call TLab_Write_ASCII(efile, __FILE__//'. Froude number must be nonzero if buoyancy is retained.')
+            call TLab_Stop(DNS_ERROR_OPTION)
+        end if
+
         if (buoyancy%type /= EQNS_NONE) then
-            call ScanFile_Char(bakfile, inifile, block, 'Vector', '0.0,-1.0,0.0', sRes)
-            idummy = 3
-            call LIST_REAL(sRes, idummy, buoyancy%vector)
-
-            if (abs(buoyancy%vector(1)) > 0.0_wp) then; buoyancy%active(1) = .true.; call TLab_Write_ASCII(lfile, 'Body force along Ox.'); end if
-            if (abs(buoyancy%vector(2)) > 0.0_wp) then; buoyancy%active(2) = .true.; call TLab_Write_ASCII(lfile, 'Body force along Oy.'); end if
-            if (abs(buoyancy%vector(3)) > 0.0_wp) then; buoyancy%active(3) = .true.; call TLab_Write_ASCII(lfile, 'Body force along Oz.'); end if
-
-            if (froude > 0.0_wp) then
-                buoyancy%vector(:) = buoyancy%vector(:)/froude ! adding the froude number into the vector g
-            else
-                call TLab_Write_ASCII(efile, __FILE__//'. Froude number must be nonzero if buoyancy is retained.')
-                call TLab_Stop(DNS_ERROR_OPTION)
-            end if
 
             buoyancy%parameters(:) = 0.0_wp
             call ScanFile_Char(bakfile, inifile, block, 'Parameters', '0.0', sRes)
             idummy = MAX_PROF
             call LIST_REAL(sRes, idummy, buoyancy%parameters)
-            buoyancy%scalar(1) = idummy
+            buoyancy%scalar(1) = idummy                                     ! number of scalars affecting buoyancy function
+            buoyancy%scalar(1) = min(inb_scal_array, buoyancy%scalar(1))
 
         end if
 
@@ -106,9 +111,7 @@ contains
     subroutine Gravity_Hydrostatic_Enthalpy(g, s, ep, T, p, yref, pref, wrk1d)
         use TLab_Constants, only: BCS_MIN
         use FDM, only: grid_dt
-        use TLAB_VARS, only: imode_eqns
-        use TLAB_VARS, only: damkohler
-        use Thermodynamics, only: imixture, GRATIO, scaleheightinv
+        use Thermodynamics
         use THERMO_ANELASTIC
         use THERMO_AIRWATER
         use THERMO_THERMAL
@@ -135,7 +138,7 @@ contains
         end do
 
         ! specific potential energy
-        if (any([DNS_EQNS_INCOMPRESSIBLE, DNS_EQNS_ANELASTIC] == imode_eqns)) then
+        if (imode_thermo == THERMO_TYPE_ANELASTIC) then
             ep(:) = (g%nodes - yref)*GRATIO*scaleheightinv
             epbackground(:) = ep(:)
         else
@@ -151,12 +154,10 @@ contains
 
         niter = 10
 
-        p(:) = pref             ! initialize iteration
-        if (imixture == MIXT_TYPE_AIRWATER .and. damkohler(3) <= 0.0_wp) then       ! Get ql, if necessary
-            s(:, 3) = 0.0_wp
-        end if
+        p(:) = pref                                                                 ! initialize iteration
+        s(:, inb_scal + 1:inb_scal_array) = 0.0_wp                                  ! initialize diagnostic
         do iter = 1, niter           ! iterate
-            if (any([DNS_EQNS_INCOMPRESSIBLE, DNS_EQNS_ANELASTIC] == imode_eqns)) then
+            if (imode_thermo == THERMO_TYPE_ANELASTIC) then
                 pbackground(:) = p_aux(:)
                 call THERMO_ANELASTIC_DENSITY(1, g%size, 1, s, r_aux(:))            ! Get r_aux=1/RT
                 r_aux(:) = -scaleheightinv*r_aux(:)
@@ -180,18 +181,27 @@ contains
             dummy = pref/dummy
             p(:) = dummy*p(:)
 
-            if (any([DNS_EQNS_INCOMPRESSIBLE, DNS_EQNS_ANELASTIC] == imode_eqns)) then
-                pbackground(:) = p(:)
-                if (imixture == MIXT_TYPE_AIRWATER .and. damkohler(3) <= 0.0_wp) then
-                    call THERMO_ANELASTIC_PH(1, g%size, 1, s(1, 2), s(1, 1))
-                else if (imixture == MIXT_TYPE_AIRWATER_LINEAR) then
-                    call THERMO_AIRWATER_LINEAR(g%size, s, s(:, inb_scal_array))
-                end if
-                call THERMO_ANELASTIC_TEMPERATURE(1, g%size, 1, s, T)
-            else
-                if (imixture == MIXT_TYPE_AIRWATER .and. damkohler(3) <= 0.0_wp) then
-                    call THERMO_AIRWATER_PH_RE(g%size, s(1, 2), p, s(1, 1), T)
-                end if
+            if (inb_flow_array > inb_flow .or. inb_scal_array > inb_scal) then      ! calculate diagnostic s.a. liquid content q_l
+                select case (imode_thermo)
+                case (THERMO_TYPE_ANELASTIC)
+                    pbackground(:) = p(:)
+                    if (imixture == MIXT_TYPE_AIRWATER) then
+                        call THERMO_ANELASTIC_PH(1, g%size, 1, s(:, 2), s(:, 1))
+                        call THERMO_ANELASTIC_TEMPERATURE(1, g%size, 1, s, T)
+                    end if
+
+                case (THERMO_TYPE_LINEAR)
+                    if (imixture == MIXT_TYPE_AIRWATER_LINEAR) then
+                        call THERMO_AIRWATER_LINEAR(g%size, s, s(:, inb_scal_array))
+
+                    end if
+
+                case (THERMO_TYPE_COMPRESSIBLE)
+                    if (imixture == MIXT_TYPE_AIRWATER) then
+                        call THERMO_AIRWATER_PH_RE(g%size, s(1, 2), p, s(1, 1), T)
+                    end if
+                end select
+                
             end if
 
         end do

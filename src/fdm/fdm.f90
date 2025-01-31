@@ -9,11 +9,10 @@ module FDM
     type grid_dt
         sequence
         character*8 name
-        integer(wi) size, inb_grid
+        integer(wi) size
         integer mode_fdm1                   ! finite-difference method for 1. order derivative
         integer mode_fdm2                   ! finite-difference method for 2. order derivative
         logical uniform, periodic
-        logical :: anelastic = .false.
         logical :: need_1der = .false.      ! In Jacobian formulation, I need 1. order derivative for the 2. order if non-uniform
         integer nb_diag_1(2)                ! # of left and right diagonals 1. order derivative (max 5/7)
         integer nb_diag_2(2)                ! # of left and right diagonals 2. order derivative (max 5/7)
@@ -36,10 +35,9 @@ module FDM
         real(wp), pointer :: lhs2(:, :)     ! pointer to LHS for 2. derivative
         real(wp), pointer :: rhs2(:, :)     ! pointer to RHS for 2. derivative
         real(wp), pointer :: lu2(:, :)      ! pointer to LU decomposition for 2. derivative
-        real(wp), pointer :: lu2d(:, :)     ! pointer to LU decomposition for 2. derivative inc. diffusion
         real(wp), pointer :: mwn2(:)        ! pointer to modified wavenumbers
-        !
-        real(wp), allocatable :: rhoinv(:)  ! anelastic density correction
+
+        real(wp), pointer :: lu2d(:, :, :)     ! pointer to LU decomposition for 2. derivative inc. diffusion; to be moved to opr_burgers
     end type grid_dt
 
     type(grid_dt), dimension(3) :: g                ! Grid information along 3 directions
@@ -53,8 +51,6 @@ contains
         use TLab_Constants, only: tfile
 #endif
         use TLAB_VARS, only: stagger_on
-        use TLAB_VARS, only: inb_scal
-        use TLAB_VARS, only: visc, schmidt
         use TLab_WorkFlow, only: TLab_Write_ASCII, TLab_Stop
         use TLab_Memory, only: TLab_Allocate_Real
         use FDM_PROCS, only: FDM_Bcs_Neumann
@@ -72,9 +68,9 @@ contains
         target x
 
 ! -------------------------------------------------------------------
-        integer(wi) i, ib, ip, is, ig, nx, ndl, ndr
+        integer(wi) i, ib, ip, ig, nx, ndl, ndr, inb_grid
         integer(wi) nmin, nmax, nsize, bcs_cases(4)
-        real(wp) dummy, coef(5), scale_loc
+        real(wp) coef(5), scale_loc
 
         integer, parameter :: i1 = 1
 
@@ -105,47 +101,50 @@ contains
         end if
 ! print *, abs((scale_loc - g%scale)/scale_loc)
         if (abs((scale_loc - g%scale)/scale_loc) > roundoff_wp) then
-            call TLab_Write_ASCII(efile, __FILE__//'. Unmathed domain scale.')
+            call TLab_Write_ASCII(efile, __FILE__//'. Unmatched domain scale.')
             call TLab_Stop(DNS_ERROR_OPTION)
         end if
 
         ! ###################################################################
         ! Memory allocation
         ! ###################################################################
-        g%inb_grid = 1                          ! Nodes
-        g%inb_grid = g%inb_grid &
-                     + 2 &                      ! Jacobians of first- and second-order derivatives
-                     + 2                        ! 1/dx and 1/dx**2 used in time-step stability constraint
+        inb_grid = 1                            ! Nodes
+        inb_grid = inb_grid &
+                   + 2 &                        ! Jacobians of first- and second-order derivatives
+                   + 2                          ! 1/dx and 1/dx**2 used in time-step stability constraint
 
-        g%inb_grid = g%inb_grid &
-                     + 5 &                      ! max # of diagonals in LHS for 1. order derivative
-                     + 7 &                      ! max # of diagonals in RHS for 1. order derivative
-                     + 5 &                      ! max # of diagonals in LHS for 2. order derivative
-                     + 7 + 5                    ! max # of diagonals in RHS for 2. order + diagonals for Jacobian case
-        g%inb_grid = g%inb_grid &
-                     + 5*2 &                    ! max # of diagonals in LHS for 1. integral, 2 bcs
-                     + 7*2                      ! max # of diagonals in RHS for 1. integral, 2 bcs
+        inb_grid = inb_grid &
+                   + 5 &                        ! max # of diagonals in LHS for 1. order derivative
+                   + 7 &                        ! max # of diagonals in RHS for 1. order derivative
+                   + 5 &                        ! max # of diagonals in LHS for 2. order derivative
+                   + 7 + 5                      ! max # of diagonals in RHS for 2. order + diagonals for Jacobian case
+        inb_grid = inb_grid &
+                   + 5*2 &                      ! max # of diagonals in LHS for 1. integral, 2 bcs
+                   + 7*2                        ! max # of diagonals in RHS for 1. integral, 2 bcs
+
         if (g%periodic) then
-            g%inb_grid = g%inb_grid &
-                         + 5 + 2 &                      ! LU decomposition 1. order
-                         + 5 + 2 &                      ! LU decomposition 2. order
-                         + (5 + 2)*(1 + inb_scal) &     ! LU decomposition 2. order with diffusivities
-                         + 2                            ! modified wavenumbers
+            inb_grid = inb_grid &
+                       + 5 + 2 &                ! LU decomposition 1. order
+                       + 5 + 2                  ! LU decomposition 2. order
         else
-            g%inb_grid = g%inb_grid &
-                         + 5*4 &                ! LU decomposition 1. order, 4 bcs
-                         + 5 &                  ! LU decomposition 2. order, 1bcs
-                         + 5*(1 + inb_scal)     ! LU decomposition 2. order w/ diffusivities, 1 bcs
-        end if
-        ! g%inb_grid = g%inb_grid &
-        !              + 1                        ! Density correction in anelastic mode
-        if ((stagger_on) .and. g%periodic) then
-            g%inb_grid = g%inb_grid &
-                         + 5 &                  ! LU decomposition interpolation
-                         + 5                    ! LU decomposition 1. order interpolatory
+            inb_grid = inb_grid &
+                       + 5*4 &                  ! LU decomposition 1. order, 4 bcs
+                       + 5                      ! LU decomposition 2. order, 1 bcs
         end if
 
-        call TLab_Allocate_Real(__FILE__, x, [g%size, g%inb_grid], g%name)
+        if (g%periodic) then
+            inb_grid = inb_grid &
+                       + 1 &                    ! modified wavenumbers for 1. order derivative
+                       + 1                      ! modified wavenumbers for 2. order derivative
+        end if
+
+        if (stagger_on .and. g%periodic) then
+            inb_grid = inb_grid &
+                       + 5 &                    ! LU decomposition interpolation
+                       + 5                      ! LU decomposition 1. order interpolatory
+        end if
+
+        call TLab_Allocate_Real(__FILE__, x, [g%size, inb_grid], g%name)
 
         ! ###################################################################
         ! Setting pointers and filling FDM data
@@ -159,7 +158,7 @@ contains
         ! ###################################################################
         g%nodes => x(:, ig)             ! Define pointer inside x
 
-        g%nodes(:) = nodes(1:nx)     ! Calculate data
+        g%nodes(:) = nodes(1:nx)        ! Calculate data
 
         ig = ig + 1                     ! Advance counter
 
@@ -265,7 +264,7 @@ contains
         ndr = g%nb_diag_1(2)
 
         ! -------------------------------------------------------------------
-        ! LU decomposition and wave numbers
+        ! LU decomposition
         g%lu1 => x(:, ig:)
 
         g%lu1(:, 1:g%nb_diag_1(1)) = g%lhs1(:, 1:g%nb_diag_1(1))
@@ -279,45 +278,6 @@ contains
 
             ig = ig + g%nb_diag_1(1) + 2
 
-            ! -------------------------------------------------------------------
-            ! wavenumbers
-            do i = 1, nx
-                if (i <= nx/2 + 1) then
-                    wrk1d(i, 1) = 2.0_wp*pi_wp*real(i - 1, wp)/real(nx, wp)
-                else
-                    wrk1d(i, 1) = 2.0_wp*pi_wp*real(i - 1 - nx, wp)/real(nx, wp)
-                end if
-            end do
-
-            ! -------------------------------------------------------------------
-            ! modified wavenumbers
-            g%mwn1 => x(:, ig)
-
-            if (.not. stagger_on) then
-
-                g%mwn1(:) = 2.0_wp*(coef(3)*sin(wrk1d(:, 1)) + coef(4)*sin(2.0_wp*wrk1d(:, 1)) + coef(5)*sin(3.0_wp*wrk1d(:, 1))) &
-                            /(1.0_wp + 2.0_wp*coef(1)*cos(wrk1d(:, 1)) + 2.0_wp*coef(2)*cos(wrk1d(:, 1)))
-
-            else ! staggered case has different modified wavenumbers!
-
-                select case (g%mode_fdm1)
-
-                case DEFAULT
-                    coef = [9.0_wp/62.0_wp, 0.0_wp, 63.0_wp/62.0_wp, 17.0_wp/62.0_wp, 0.0_wp]
-
-                end select
-
-                g%mwn1(:) = 2.0_wp*(coef(3)*sin(1.0_wp/2.0_wp*wrk1d(:, 1)) + coef(4)/3.0_wp*sin(3.0_wp/2.0_wp*wrk1d(:, 1))) &
-                            /(1.0_wp + 2.0_wp*coef(1)*cos(wrk1d(:, 1)))
-
-            end if
-
-            ! final calculations because it is mainly used in the Poisson solver like this
-            g%mwn1(:) = (g%mwn1(:)/g%jac(1, 1))**2
-
-            ig = ig + 1
-
-            ! -------------------------------------------------------------------
         else                            ! biased,  different BCs
             bcs_cases(1:4) = [BCS_DD, BCS_ND, BCS_DN, BCS_NN]
             do ib = 1, 4
@@ -342,6 +302,44 @@ contains
                 ig = ig + 5
 
             end do
+
+        end if
+
+        ! -------------------------------------------------------------------
+        ! modified wavenumbers
+        if (g%periodic) then
+            do i = 1, nx        ! wavenumbers, the independent variable to construct the modified ones
+                if (i <= nx/2 + 1) then
+                    wrk1d(i, 1) = 2.0_wp*pi_wp*real(i - 1, wp)/real(nx, wp)
+                else
+                    wrk1d(i, 1) = 2.0_wp*pi_wp*real(i - 1 - nx, wp)/real(nx, wp)
+                end if
+            end do
+
+            g%mwn1 => x(:, ig)
+
+            if (.not. stagger_on) then
+
+                g%mwn1(:) = 2.0_wp*(coef(3)*sin(wrk1d(:, 1)) + coef(4)*sin(2.0_wp*wrk1d(:, 1)) + coef(5)*sin(3.0_wp*wrk1d(:, 1))) &
+                            /(1.0_wp + 2.0_wp*coef(1)*cos(wrk1d(:, 1)) + 2.0_wp*coef(2)*cos(wrk1d(:, 1)))
+
+            else ! staggered case has different modified wavenumbers!
+
+                select case (g%mode_fdm1)
+
+                case DEFAULT
+                    coef = [9.0_wp/62.0_wp, 0.0_wp, 63.0_wp/62.0_wp, 17.0_wp/62.0_wp, 0.0_wp]
+
+                end select
+
+                g%mwn1(:) = 2.0_wp*(coef(3)*sin(1.0_wp/2.0_wp*wrk1d(:, 1)) + coef(4)/3.0_wp*sin(3.0_wp/2.0_wp*wrk1d(:, 1))) &
+                            /(1.0_wp + 2.0_wp*coef(1)*cos(wrk1d(:, 1)))
+
+            end if
+
+            g%mwn1(:) = (g%mwn1(:)/g%jac(1, 1))**2      ! as used in Poisson solver
+
+            ig = ig + 1
 
         end if
 
@@ -418,18 +416,6 @@ contains
             end select
             ig = ig + g%nb_diag_2(1) + 2
 
-            ! -------------------------------------------------------------------
-            ! modified wavenumbers
-            g%mwn2 => x(:, ig)
-
-            g%mwn2(:) = 2.0_wp*(coef(3)*(1.0_wp - cos(wrk1d(:, 1))) + coef(4)*(1.0_wp - cos(2.0_wp*wrk1d(:, 1))) + coef(5)*(1.0_wp - cos(3.0_wp*wrk1d(:, 1)))) &
-                        /(1.0_wp + 2.0_wp*coef(1)*cos(wrk1d(:, 1)) + 2.0_wp*coef(2)*cos(2.0_wp*wrk1d(:, 1)))
-
-            g%mwn2(:) = g%mwn2(:)/(g%jac(1, 1)**2)  ! as used in the Helmholtz solver
-
-            ig = ig + 1
-
-            ! -------------------------------------------------------------------
         else
             select case (g%nb_diag_2(1))
             case (3)
@@ -439,45 +425,19 @@ contains
 
         end if
 
-! ###################################################################
-! LU factorization second-order derivative times the diffusivities
-! ###################################################################
-        g%lu2d => x(:, ig:)
+        ! -------------------------------------------------------------------
+        ! modified wavenumbers
+        if (g%periodic) then
+            g%mwn2 => x(:, ig)
 
-        ip = 0
-        do is = 0, inb_scal ! case 0 for the reynolds number
-            if (is == 0) then
-                dummy = visc
-            else
-                dummy = visc/schmidt(is)
-            end if
+            g%mwn2(:) = 2.0_wp*(coef(3)*(1.0_wp - cos(wrk1d(:, 1))) + coef(4)*(1.0_wp - cos(2.0_wp*wrk1d(:, 1))) + coef(5)*(1.0_wp - cos(3.0_wp*wrk1d(:, 1)))) &
+                        /(1.0_wp + 2.0_wp*coef(1)*cos(wrk1d(:, 1)) + 2.0_wp*coef(2)*cos(2.0_wp*wrk1d(:, 1)))
 
-            if (g%nb_diag_2(1) /= 3) then
-                call TLab_Write_ASCII(efile, __FILE__//'. Undeveloped for more than 3 LHS diagonals in 2. order derivatives.')
-                call TLab_Stop(DNS_ERROR_OPTION)
-            end if
+            g%mwn2(:) = g%mwn2(:)/(g%jac(1, 1)**2)  ! as used in the Helmholtz solver
 
-            if (g%periodic) then                        ! Check routines TRIDPFS and TRIDPSS
-                g%lu2d(:, ip + 1) = g%lu2(:, 1)         ! matrix L; 1. subdiagonal
-                g%lu2d(:, ip + 2) = g%lu2(:, 2)*dummy   ! matrix L; 1/diagonal
-                g%lu2d(:, ip + 3) = g%lu2(:, 3)         ! matrix U is the same
-                g%lu2d(:, ip + 4) = g%lu2(:, 4)/dummy   ! matrix L; Additional row/column
-                g%lu2d(:, ip + 5) = g%lu2(:, 5)         ! matrix U is the same
+            ig = ig + 1
 
-                ig = ig + 5
-                ip = ip + 5
-
-            else                                        ! Check routines TRIDFS and TRIDSS
-                g%lu2d(:, ip + 1) = g%lu2(:, 1)         ! matrix L is the same
-                g%lu2d(:, ip + 2) = g%lu2(:, 2)*dummy   ! matrix U; 1/diagonal
-                g%lu2d(:, ip + 3) = g%lu2(:, 3)/dummy   ! matrix U; 1. superdiagonal
-
-                ig = ig + 3
-                ip = ip + 3
-
-            end if
-
-        end do
+        end if
 
 ! ###################################################################
 ! LU factorization interpolation, done in routine TRID*FS
@@ -513,19 +473,10 @@ contains
             ig = ig + 5
         end if
 
-! ! ###################################################################
-! ! Density correction in anelastic mode
-! ! ###################################################################
-!         g%rhoinv => x(:, ig)
-
-!         g%anelastic = .false. ! Default; activated in TLab_Initialize_Background
-
-!         ig = ig + 1
-
 ! ###################################################################
 ! Check array sizes
 ! ###################################################################
-        if (ig >= g%inb_grid) then
+        if (ig >= inb_grid) then
             call TLab_Write_ASCII(efile, __FILE__//'. Grid size incorrect.')
             call TLab_Stop(DNS_ERROR_DIMGRID)
         end if

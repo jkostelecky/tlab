@@ -16,7 +16,7 @@ program INISCAL
     use TLabMPI_Transpose, only: TLabMPI_Transpose_Initialize
 #endif
     use FDM, only: g, FDM_Initialize
-    use Thermodynamics, only: imixture, Thermodynamics_Initialize_Parameters
+    use Thermodynamics
     use TLab_Background, only: TLab_Initialize_Background
     use Gravity, only: Gravity_Initialize
     use Radiation, only: Radiation_Initialize, infraredProps, Radiation_Infrared_Y
@@ -28,10 +28,11 @@ program INISCAL
 
     implicit none
 
-! -------------------------------------------------------------------
-    integer(wi) is, inb_scal_loc
+    ! -------------------------------------------------------------------
+    integer(wi) is
+    type(term_dt) localInfraredProps
 
-! ###################################################################
+    ! ###################################################################
     call TLab_Start()
 
     call TLab_Initialize_Parameters(ifile)
@@ -74,14 +75,7 @@ program INISCAL
     ! ###################################################################
     call TLab_Write_ASCII(lfile, 'Initializing scalars.')
 
-    inb_scal_loc = inb_scal
-    if (imixture == MIXT_TYPE_AIRWATER) then
-        if (damkohler(1) > 0.0_wp .and. flag_mixture == 1) then
-            inb_scal_loc = inb_scal - 1
-        end if
-    end if
-
-    do is = 1, inb_scal_loc
+    do is = 1, inb_scal
         call SCAL_MEAN(is, s(:, is))
 
         select case (flag_s)
@@ -98,25 +92,32 @@ program INISCAL
 
     ! ###################################################################
     ! Initial liquid in equilibrium; overwrite previous values
-    if (imixture == MIXT_TYPE_AIRWATER) then
-        if (damkohler(3) > 0.0_wp .and. flag_mixture == 1) then
-            call THERMO_ANELASTIC_PH(imax, jmax, kmax, s(1, 2), s(1, 1))
-        end if
+    if (flag_mixture == 1 .or. inb_scal_array > inb_scal) then
+        select case (imode_thermo)
+        case (THERMO_TYPE_ANELASTIC)
+            if (imixture == MIXT_TYPE_AIRWATER) then
+                call THERMO_ANELASTIC_PH(imax, jmax, kmax, s(1, 2), s(1, 1))
+            end if
+
+        case (THERMO_TYPE_LINEAR)
+            if (imixture == MIXT_TYPE_AIRWATER_LINEAR) then
+                call THERMO_AIRWATER_LINEAR(imax*jmax*kmax, s, s(1, inb_scal_array))
+            end if
+
+        end select
+
     end if
 
     ! ###################################################################
     ! Initial radiation effect as an accumulation during a certain interval of time
     if (infraredProps%type /= EQNS_NONE .and. norm_ini_radiation /= 0.0_wp) then
         norm_ini_radiation = norm_ini_radiation/infraredProps%auxiliar(1)
-        infraredProps%auxiliar(:) = infraredProps%auxiliar(:)*norm_ini_radiation
-        if (imixture == MIXT_TYPE_AIRWATER .and. damkohler(3) <= 0.0_wp) then ! Calculate q_l
-            call THERMO_ANELASTIC_PH(imax, jmax, kmax, s(1, 2), s(1, 1))
-        else if (imixture == MIXT_TYPE_AIRWATER_LINEAR) then
-            call THERMO_AIRWATER_LINEAR(imax*jmax*kmax, s, s(1, inb_scal_array))
-        end if
+        localInfraredProps = infraredProps
+        localInfraredProps%auxiliar(:) = localInfraredProps%auxiliar(:)*norm_ini_radiation
+
         do is = 1, inb_scal
-            if (infraredProps%active(is)) then
-                call Radiation_Infrared_Y(infraredProps, imax, jmax, kmax, g(2), s, txc(:, 1), txc(:, 2), txc(:, 3), txc(:, 4))
+            if (localInfraredProps%active(is)) then
+                call Radiation_Infrared_Y(localInfraredProps, imax, jmax, kmax, g(2), s, txc(:, 1), txc(:, 2), txc(:, 3), txc(:, 4))
                 s(1:isize_field, is) = s(1:isize_field, is) + txc(1:isize_field, 1)
             end if
         end do

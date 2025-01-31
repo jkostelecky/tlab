@@ -4,6 +4,8 @@
 
 module DNS_STATISTICS
     use TLab_Constants, only: MAX_AVG_TEMPORAL, wp, wi, small_wp
+    use Thermodynamics
+    use Gravity, only: buoyancy, Gravity_Buoyancy
     implicit none
     save
     private
@@ -12,7 +14,8 @@ module DNS_STATISTICS
     real(wp), allocatable, public :: mean_flow(:, :, :)     ! These 2 are for spatial case
     real(wp), allocatable, public :: mean_scal(:, :, :, :)
 
-    logical, public :: stats_averages, stats_pdfs, stats_intermittency, stats_buoyancy
+    logical, public :: stats_averages, stats_pdfs, stats_intermittency
+    logical :: stats_buoyancy
 
     public :: DNS_STATISTICS_INITIALIZE, DNS_STATISTICS_TEMPORAL, DNS_STATISTICS_SPATIAL
 
@@ -24,7 +27,7 @@ contains
 
         use TLAB_VARS, only: imode_sim, jmax, inb_scal
         use Avg_Spatial, only: nstatavg
-        
+
         if (imode_sim == DNS_MODE_TEMPORAL) then
             allocate (mean(jmax, MAX_AVG_TEMPORAL))
 
@@ -32,6 +35,16 @@ contains
             allocate (mean_flow(nstatavg, jmax, MA_MOMENTUM_SIZE))
             allocate (mean_scal(nstatavg, jmax, MS_SCALAR_SIZE, inb_scal))
 
+        end if
+
+        stats_buoyancy = .false.  ! default
+
+        ! in case we need the buoyancy statistics
+        if (buoyancy%type == EQNS_BOD_QUADRATIC .or. &
+            buoyancy%type == EQNS_BOD_BILINEAR .or. &
+            imixture == MIXT_TYPE_AIRWATER .or. &
+            imixture == MIXT_TYPE_AIRWATER_LINEAR) then
+            stats_buoyancy = .true.
         end if
 
         return
@@ -55,10 +68,8 @@ contains
         use TLab_Arrays
         use THERMO_ANELASTIC
         use DNS_ARRAYS
-        use Thermodynamics, only: imixture
         use PARTICLE_VARS
         use PARTICLE_ARRAYS
-        use Gravity, only: buoyancy, Gravity_Buoyancy
         use FI_VORTICITY_EQN
 
         ! -------------------------------------------------------------------
@@ -75,16 +86,6 @@ contains
 #ifdef TRACE_ON
         call TLab_Write_ASCII(tfile, 'ENTERING STATS_TEMPORAL_LAYER')
 #endif
-
-        stats_buoyancy = .false.  ! default
-
-        ! in case we need the buoyancy statistics
-        if (buoyancy%type == EQNS_BOD_QUADRATIC .or. &
-            buoyancy%type == EQNS_BOD_BILINEAR .or. &
-            imixture == MIXT_TYPE_AIRWATER .or. &
-            imixture == MIXT_TYPE_AIRWATER_LINEAR) then
-            stats_buoyancy = .true.
-        end if
 
         ! Calculate pressure
         if (any([DNS_EQNS_INCOMPRESSIBLE, DNS_EQNS_ANELASTIC] == imode_eqns)) then
@@ -156,24 +157,25 @@ contains
                                      txc(1, 1), txc(1, 2), txc(1, 4), txc(1, 5), txc(1, 6), hq(1, 3), mean)
                 end do
 
-                if (any([DNS_EQNS_INCOMPRESSIBLE, DNS_EQNS_ANELASTIC] == imode_eqns)) then
-                    ! Buoyancy as next scalar, current value of counter is=inb_scal_array+1
-                    if (stats_buoyancy) then
-                        if (buoyancy%type == EQNS_EXPLICIT) then
-                            call THERMO_ANELASTIC_BUOYANCY(imax, jmax, kmax, s, hq(1, 1))
-                        else
-                            wrk1d(1:jmax, 1) = 0.0_wp
-                            call Gravity_Buoyancy(buoyancy, imax, jmax, kmax, s, hq(1, 1), wrk1d)
-                        end if
-                        dummy = 1.0_wp/froude
-                        hq(1:isize_field, 1) = hq(1:isize_field, 1)*dummy
-
-                        hq(1:isize_field, 3) = txc(1:isize_field, 3) ! Pass the pressure
-                        call AVG_SCAL_XZ(is, q, s, hq(1, 1), &
-                                         txc(1, 1), txc(1, 2), txc(1, 4), txc(1, 5), txc(1, 6), hq(1, 3), mean)
-
+                ! if (any([DNS_EQNS_INCOMPRESSIBLE, DNS_EQNS_ANELASTIC] == imode_eqns)) then
+                ! Buoyancy as next scalar, current value of counter is=inb_scal_array+1
+                if (stats_buoyancy) then
+                    if (buoyancy%type == EQNS_EXPLICIT) then
+                        call THERMO_ANELASTIC_BUOYANCY(imax, jmax, kmax, s, hq(1, 1))
+                    else
+                        wrk1d(1:jmax, 1) = 0.0_wp
+                        call Gravity_Buoyancy(buoyancy, imax, jmax, kmax, s, hq(1, 1), wrk1d)
                     end if
+                    dummy = 1.0_wp/froude
+                    hq(1:isize_field, 1) = hq(1:isize_field, 1)*dummy
 
+                    hq(1:isize_field, 3) = txc(1:isize_field, 3) ! Pass the pressure
+                    call AVG_SCAL_XZ(is, q, s, hq(1, 1), &
+                                     txc(1, 1), txc(1, 2), txc(1, 4), txc(1, 5), txc(1, 6), hq(1, 3), mean)
+
+                end if
+
+                if (imode_thermo == THERMO_TYPE_ANELASTIC) then
                     if (imixture == MIXT_TYPE_AIRWATER) then
                         is = is + 1
                         call THERMO_ANELASTIC_THETA_L(imax, jmax, kmax, s, hq(1, 1))
@@ -183,6 +185,7 @@ contains
                                          txc(1, 1), txc(1, 2), txc(1, 4), txc(1, 5), txc(1, 6), hq(1, 3), mean)
                     end if
                 end if
+                ! end if
 
             end if
 

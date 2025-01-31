@@ -32,7 +32,7 @@ subroutine RHS_GLOBAL_INCOMPRESSIBLE_NBC(u, v, w, s, &
     use DNS_LOCAL, only: use_tower
     use OPR_PARTIAL
     use OPR_ELLIPTIC
-    use FI_SOURCES
+    use TLab_Sources
     use DNS_TOWER
     use AVG_PHASE
 
@@ -178,9 +178,11 @@ subroutine RHS_GLOBAL_INCOMPRESSIBLE_NBC(u, v, w, s, &
         t_init = t_init + MPI_WTime()
 
         ! id = TLAB_MPI_TRP_I_PARTIAL; nyz_trans = ims_size_i(id)
-        id = TLAB_MPI_TRP_I_PARTIAL; nyz_trans = ims_trp_plan_i(id)%nlines
+        ! id = TLAB_MPI_TRP_I_PARTIAL; 
+        nyz_trans = ims_trp_plan_i(TLAB_MPI_TRP_I_PARTIAL)%nlines
         ! id = TLAB_MPI_TRP_K_PARTIAL; nxy_trans = ims_size_k(id)
-        id = TLAB_MPI_TRP_K_PARTIAL; nxy_trans = ims_trp_plan_k(id)%nlines
+        ! id = TLAB_MPI_TRP_K_PARTIAL; 
+        nxy_trans = ims_trp_plan_k(TLAB_MPI_TRP_K_PARTIAL)%nlines
         !
         ! kick off transpose U y->x and W y->z
         call NB3DFFT_R2R_YXCOMM(u, bt1, bt1, tmp11, info(FUYX), t_tmp); t_comp = t_comp + t_tmp
@@ -190,11 +192,11 @@ subroutine RHS_GLOBAL_INCOMPRESSIBLE_NBC(u, v, w, s, &
         ! Vertical derivatives, and Vertical advection
         !
         t_tmp = -MPI_WTime()
-        call OPR_Burgers_Y(OPR_B_SELF, 0, imax, jmax, kmax, bcs, g(2), v, v, tmp21, tmp22) ! store v transposed in tmp22
+        call OPR_Burgers_Y(OPR_B_SELF, 0, imax, jmax, kmax, bcs, v, v, tmp21, tmp22) ! store v transposed in tmp22
         h2 = h2 + tmp21
-        call OPR_Burgers_Y(OPR_B_U_IN, 0, imax, jmax, kmax, bcs, g(2), u, v, tmp21, tmpu, tmp22) ! using tmp22
+        call OPR_Burgers_Y(OPR_B_U_IN, 0, imax, jmax, kmax, bcs, u, v, tmp21, tmpu, tmp22) ! using tmp22
         h1 = h1 + tmp21
-        call OPR_Burgers_Y(OPR_B_U_IN, 0, imax, jmax, kmax, bcs, g(2), w, v, tmp21, tmpu, tmp22) ! using tmp22
+        call OPR_Burgers_Y(OPR_B_U_IN, 0, imax, jmax, kmax, bcs, w, v, tmp21, tmpu, tmp22) ! using tmp22
         h3 = h3 + tmp21
         t_ser = t_ser + (t_tmp + MPI_WTime())
 
@@ -202,7 +204,7 @@ subroutine RHS_GLOBAL_INCOMPRESSIBLE_NBC(u, v, w, s, &
 
         t_tmp = -MPI_WTime()
         do is = 1, inb_scal
-            call OPR_Burgers_Y(OPR_B_U_IN, is, imax, jmax, kmax, bcs, g(2), s(1, is), v, tmp21, tmpu, tmp22) ! using tmp22
+            call OPR_Burgers_Y(OPR_B_U_IN, is, imax, jmax, kmax, bcs, s(1, is), v, tmp21, tmpu, tmp22) ! using tmp22
             hs(:, is) = hs(:, is) + tmp21
         end do
         t_ser = t_ser + (t_tmp + MPI_WTime())
@@ -216,7 +218,7 @@ subroutine RHS_GLOBAL_INCOMPRESSIBLE_NBC(u, v, w, s, &
                 !
                 t_tmp = -MPI_WTime()
                 call TLab_Transpose(bt1, g(1)%size, nyz_trans, g(1)%size, tmpu, nyz_trans)
-                call OPR_Burgers_1D(0, nyz_trans, bcs, g(1), tmpu, tmpu, tmp11)
+                call OPR_Burgers_1D(0, nyz_trans, bcs, tmpu, tmpu, tmp11)
                 call TLab_Transpose(tmp11, nyz_trans, g(1)%size, nyz_trans, bt1, g(1)%size)
                 t_ser = t_ser + (t_tmp + MPI_WTime())
                 !
@@ -230,7 +232,7 @@ subroutine RHS_GLOBAL_INCOMPRESSIBLE_NBC(u, v, w, s, &
                 call NB3DFFT_R2R_ZUNPACK(tmpw, bt2, info(FWYZ), t_tmp); t_comp = t_comp + t_tmp
                 !
                 t_tmp = -MPI_WTime()
-                call OPR_Burgers_1D(0, nxy_trans, bcs, g(3), tmpw, tmpw, bt2)
+                call OPR_Burgers_1D(0, nxy_trans, bcs, tmpw, tmpw, bt2)
                 t_ser = t_ser + (t_tmp + MPI_WTime())
                 !
                 call NB3DFFT_R2R_ZYCOMM(bt2, bt2, tmp22, tmp21, info(BWZY), t_tmp); t_comp = t_comp + t_tmp
@@ -246,7 +248,7 @@ subroutine RHS_GLOBAL_INCOMPRESSIBLE_NBC(u, v, w, s, &
                 !
                 t_tmp = -MPI_WTime()
                 call TLab_Transpose(bt3, g(1)%size, nyz_trans, g(1)%size, tmp31, nyz_trans)
-                call OPR_Burgers_1D(0, nyz_trans, bcs, g(1), tmp31, tmpu, tmp32)
+                call OPR_Burgers_1D(0, nyz_trans, bcs, tmp31, tmpu, tmp32)
                 call TLab_Transpose(tmp32, nyz_trans, g(1)%size, nyz_trans, bt3, g(1)%size)
                 t_ser = t_ser + (t_tmp + MPI_WTime())
                 !
@@ -259,7 +261,7 @@ subroutine RHS_GLOBAL_INCOMPRESSIBLE_NBC(u, v, w, s, &
                 call NB3DFFT_R2R_ZUNPACK(tmp41, bt4, info(FUYZ), t_tmp); t_comp = t_comp + t_tmp; 
                 !
                 t_tmp = -MPI_WTime()
-                call OPR_Burgers_1D(0, nxy_trans, bcs, g(3), tmp41, tmpw, bt4)
+                call OPR_Burgers_1D(0, nxy_trans, bcs, tmp41, tmpw, bt4)
                 t_ser = t_ser + (t_tmp + MPI_WTime())
                 !
                 call NB3DFFT_R2R_ZYCOMM(bt4, bt4, tmp42, tmp41, info(BUZY), t_tmp); t_comp = t_comp + t_tmp; 
@@ -323,7 +325,7 @@ subroutine RHS_GLOBAL_INCOMPRESSIBLE_NBC(u, v, w, s, &
                 !
                 t_tmp = -MPI_WTime()
                 call TLab_Transpose(bt1, g(1)%size, nyz_trans, g(1)%size, tmp11, nyz_trans)
-                call OPR_Burgers_1D(0, nyz_trans, bcs, g(1), tmp11, tmpu, tmp12)
+                call OPR_Burgers_1D(0, nyz_trans, bcs, tmp11, tmpu, tmp12)
                 call TLab_Transpose(tmp12, nyz_trans, g(1)%size, nyz_trans, bt1, g(1)%size)
                 t_ser = t_ser + (t_tmp + MPI_WTime())
                 !
@@ -335,7 +337,7 @@ subroutine RHS_GLOBAL_INCOMPRESSIBLE_NBC(u, v, w, s, &
                 call NB3DFFT_R2R_ZUNPACK(tmp21, bt2, info(FVYZ), t_tmp); t_comp = t_comp + t_tmp; 
                 !
                 t_tmp = -MPI_WTime()
-                call OPR_Burgers_1D(0, nxy_trans, bcs, g(3), tmp21, tmpw, bt2)
+                call OPR_Burgers_1D(0, nxy_trans, bcs, tmp21, tmpw, bt2)
                 t_ser = t_ser + (t_tmp + MPI_WTime())
                 !
                 call NB3DFFT_R2R_ZYCOMM(bt2, bt2, tmp22, tmp21, info(BVZY), t_tmp); t_comp = t_comp + t_tmp; 
@@ -347,7 +349,7 @@ subroutine RHS_GLOBAL_INCOMPRESSIBLE_NBC(u, v, w, s, &
                 !
                 t_tmp = -MPI_WTime()
                 call TLab_Transpose(bt3, g(1)%size, nyz_trans, g(1)%size, tmp31, nyz_trans)
-                call OPR_Burgers_1D(0, nyz_trans, bcs, g(1), tmp31, tmpu, tmp32)
+                call OPR_Burgers_1D(0, nyz_trans, bcs, tmp31, tmpu, tmp32)
                 call TLab_Transpose(tmp32, nyz_trans, g(1)%size, nyz_trans, bt3, g(1)%size)
                 t_ser = t_ser + (t_tmp + MPI_WTime())
                 !
@@ -359,7 +361,7 @@ subroutine RHS_GLOBAL_INCOMPRESSIBLE_NBC(u, v, w, s, &
                 call NB3DFFT_R2R_ZUNPACK(tmp41, bt4, info(F1YZ), t_tmp); t_comp = t_comp + t_tmp; 
                 !
                 t_tmp = -MPI_WTime()
-                call OPR_Burgers_1D(0, nxy_trans, bcs, g(3), tmp41, tmpw, bt4)
+                call OPR_Burgers_1D(0, nxy_trans, bcs, tmp41, tmpw, bt4)
                 t_ser = t_ser + (t_tmp + MPI_WTime())
                 !
                 call NB3DFFT_R2R_ZYCOMM(bt4, bt4, tmp42, tmp41, info(B1ZY), t_tmp); t_comp = t_comp + t_tmp; 
@@ -422,8 +424,8 @@ subroutine RHS_GLOBAL_INCOMPRESSIBLE_NBC(u, v, w, s, &
         !
         ! Source terms
         !
-        call FI_SOURCES_FLOW(u, s, h1, tmp31)
-        call FI_SOURCES_SCAL(s, hs, tmp31, tmp32, tmp42)
+        call TLab_Sources_Flow(u, s, h1, tmp31)
+        call TLab_Sources_Scal(s, hs, tmp31, tmp32, tmp42)
         !
         ! Impose buffer zone as relaxation terms
         !
@@ -458,7 +460,7 @@ subroutine RHS_GLOBAL_INCOMPRESSIBLE_NBC(u, v, w, s, &
                     !
                     t_tmp = -MPI_WTime()
                     call TLab_Transpose(bt1, g(1)%size, nyz_trans, g(1)%size, tmp11, nyz_trans)
-                    call OPR_Burgers_1D(0, nyz_trans, bcs, g(1), tmp11, tmpu, tmp12)
+                    call OPR_Burgers_1D(0, nyz_trans, bcs, tmp11, tmpu, tmp12)
                     call TLab_Transpose(tmp12, nyz_trans, g(1)%size, nyz_trans, bt1, g(1)%size)
                     t_ser = t_ser + (t_tmp + MPI_WTime())
                     !
@@ -470,7 +472,7 @@ subroutine RHS_GLOBAL_INCOMPRESSIBLE_NBC(u, v, w, s, &
                     call NB3DFFT_R2R_ZUNPACK(tmp21, bt2, info(F2YZ), t_tmp); t_comp = t_comp + t_tmp; 
                     !
                     t_tmp = -MPI_WTime()
-                    call OPR_Burgers_1D(0, nxy_trans, bcs, g(3), tmp21, tmpw, bt2)
+                    call OPR_Burgers_1D(0, nxy_trans, bcs, tmp21, tmpw, bt2)
                     t_ser = t_ser + (t_tmp + MPI_WTime())
                     !
                     call NB3DFFT_R2R_ZYCOMM(bt2, bt2, tmp22, tmp21, info(B2ZY), t_tmp); t_comp = t_comp + t_tmp; 

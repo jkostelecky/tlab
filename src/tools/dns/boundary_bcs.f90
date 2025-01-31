@@ -140,7 +140,7 @@ contains
         use TLAB_VARS, only: inb_scal_array
         use TLabMPI_VARS, only: ims_npro_k
         use TLabMPI_VARS, only: ims_bcs_imax, ims_bcs_jmax
-        use TLabMPI_Transpose
+        use TLabMPI_Transpose, only: TLabMPI_Trp_TypeK_Create, ims_trp_plan_k
 #endif
 
 ! -------------------------------------------------------------------
@@ -223,7 +223,7 @@ contains
                 ! call TLab_Write_ASCII(lfile, str)
                 isize_loc = ims_bcs_imax*jmax
                 ! call TLabMPI_TypeK_Create(ims_npro_k, kmax, isize_loc, 1, 1, 1, 1, id)
-                ims_trp_plan_k(TLAB_MPI_TRP_K_NRBCX) = TLabMPI_Trp_TypeK_Create_Devel(kmax, isize_loc, 1, 1, 1, 1, 'Ox BCs transverse terms. '//trim(adjustl(str))//' planes.')
+                ims_trp_plan_k(TLAB_MPI_TRP_K_NRBCX) = TLabMPI_Trp_TypeK_Create(kmax, isize_loc, 1, 1, 1, 1, 'Ox BCs transverse terms. '//trim(adjustl(str))//' planes.')
             end if
 
             if (.not. g(2)%periodic) then ! Required for NRBCs in Oy
@@ -238,7 +238,7 @@ contains
                 ! call TLab_Write_ASCII(lfile, str)
                 isize_loc = imax*ims_bcs_jmax
                 ! call TLabMPI_TypeK_Create(ims_npro_k, kmax, isize_loc, 1, 1, 1, 1, id)
-                ims_trp_plan_k(TLAB_MPI_TRP_K_NRBCY) = TLabMPI_Trp_TypeK_Create_Devel(kmax, isize_loc, 1, 1, 1, 1, 'Oy BCs transverse terms. '//trim(adjustl(str))//' planes.')
+                ims_trp_plan_k(TLAB_MPI_TRP_K_NRBCY) = TLabMPI_Trp_TypeK_Create(kmax, isize_loc, 1, 1, 1, 1, 'Oy BCs transverse terms. '//trim(adjustl(str))//' planes.')
             end if
 #endif
 
