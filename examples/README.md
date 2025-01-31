@@ -4,27 +4,27 @@ This is a summary of the workflow. The details of each tool and the correspondin
 
 ## Preprocessing Tools
 
-| binary     | inputs                             | outputs            |
-| ---------- | ---------------------------------- | ------------------ |
-| inigrid.x  | tlab.ini                           | grid               |
-| inirand.x  | tlab.ini, grid                     | [flow,scal].rand.? |        
-| iniflow.x  | tlab.ini, grid [,flow.rand.?]      | flow.ics.?         |
-| iniscal.x  | tlab.ini, grid [,scal.rand.?]      | scal.ics.?         |
+| binary    | inputs                            | outputs |
+| --------- | --------------------------------- | ------- |
+|inigrid.x   | tlab.ini                         | grid |
+|inirand.x   | tlab.ini, grid                      |  [flow,scal].rand.? |        
+|iniflow.x |  tlab.ini, grid [,flow.rand.?]     | flow.ics.?
+|iniscal.x |   tlab.ini, grid [,scal.rand.?]     |    scal.ics.?
 
 ## Simulation Tools
 
-| binary     | inputs                             | outputs            |
-| ---------- | ---------------------------------- | ------------------ |
-| dns.x      | tlab.ini, grid, flow.*.?, scal.*.? | flow.*.?, scal.*.? |
+| binary    | inputs                            | outputs |
+| --------- | --------------------------------- | ------- |
+|dns.x      |tlab.ini, grid, flow.*.?, scal.*.? |   flow.*.?, scal.*.? |
 
 ## Postprocessing Tools
 
-| binary     | inputs                             | outputs            |
-| ---------- | ---------------------------------- | ------------------ |
-| averages.x | tlab.ini, grid, flow.*.?, scal.*.? | avg*               |
-| pdfs.x     | tlab.ini, grid, flow.*.?, scal.*.? | pdf*               |
-| spectra.x  | tlab.ini, grid, flow.*.?, scal.*.? | xsp*, zsp*         |
-| visuals.x  | tlab.ini, grid, flow.*.?, scal.*.? | *variable files*   |
+| binary    | inputs                            | outputs |
+| --------- | --------------------------------- | ------- |
+|averages.x | tlab.ini, grid, flow.*.?, scal.*.?| avg*
+|pdfs.x     | tlab.ini, grid, flow.*.?, scal.*.?| pdf*
+|spectra.x  | tlab.ini, grid, flow.*.?, scal.*.?| xsp*, zsp*
+|visuals.x  | tlab.ini, grid, flow.*.?, scal.*.?| *variable files* |
 
 ## List of examples
 
@@ -76,33 +76,11 @@ This is a summary of the workflow. The details of each tool and the correspondin
 
 ### 2D cases: Lagrangian routines
 
-<<<<<<< HEAD
-* Case31. Case01 (shear layer), saving only the particles.  
-* Case32. Case01 (shear layer), saving trajectories as well (but fewer particles).  
-* Case33. Case32, but inertia particles instead of tracers.  
-* Case34. Case17 (cloud-top), solving liquid equation w/ & w/o diffusion.  
-* Case35. Same as 34, but with a stratified bottom interface.  
-
-### Gravity waves
-
-* Case37. Wave maker.
-
-### 3D cases: Ekman flow
-
-* Case41. Neutral Ekman layer without sponge at the top.  
-* Case42. Neutral Ekman layer with sponge at the top.  
-* Case44. Stable Ekman layer with sponge at the top.  
-* Case45. Same as 21, implicit solver.  
-* Case46. Same as 22, implicit solver.  
-* Case47. Same as 23, implicit solver.  
-* Case48. Neutral Ekman layer with sponge at the top and interactive BC at the bottom.  
-=======
 * Case51. Case01 (shear layer), saving only the particles.  
 * Case52. Case01 (shear layer), saving trajectories as well (but fewer particles).  
 * Case53. Case32, but inertia particles instead of tracers.  
 * Case54. Case17 (cloud-top), solving liquid equation w/ & w/o diffusion.  
 * Case55. Same as 34, but with a stratified bottom interface.  
->>>>>>> upstream/master
 
 ### 1D cases
 
