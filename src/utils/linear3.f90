@@ -157,52 +157,26 @@ subroutine TRIDSS(nmax, len, a, b, c, f)
 999 continue
 !!$omp end parallel
 
+#else
 ! -----------------------------------------------------------------------
 ! With APU ACCELERATION 
+! Reordering things for offloading on the GPU
 ! -----------------------------------------------------------------------
-
-#else
-
-    ! Forward sweep
-    do n = 2, nmax
-        dummy1 = a(n)
-
-        !$omp target teams distribute parallel do default(none) &
-        !$omp private(l) &
-        !$omp shared(f,dummy1,n,len)
-        do l = 1, len
-            f(l, n) = f(l, n) + dummy1*f(l, n - 1)
-        end do
-        !$omp end target teams distribute parallel do
-
-    end do
-
-    ! Backward sweep
-    dummy1 = b(nmax)
-
     !$omp target teams distribute parallel do default(none) &
     !$omp private(l) &
-    !$omp shared(f,dummy1,nmax,len)
+    !$omp shared(f,wrk,a,b,c,len,nmax,n)
     do l = 1, len
-        f(l, nmax) = f(l, nmax)*dummy1
+        ! Forward sweep
+        do n = 2, nmax
+            f(l, n) = f(l, n) + a(n)*f(l, n - 1)
+        end do
+        ! Backward sweep
+        f(l, nmax) = f(l, nmax)*b(nmax)
+        do n = nmax - 1, 1, -1
+            f(l, n) = (f(l, n) + c(n)*f(l, n + 1))*b(n)
+        end do
     end do
     !$omp end target teams distribute parallel do
-
-    do n = nmax - 1, 1, -1
-        dummy1 = c(n)
-        dummy2 = b(n)
-
-        !$omp target teams distribute parallel do default(none) &
-        !$omp private(l) &
-        !$omp shared(f,dummy1, dummy2,n,len)
-        do l = 1, len
-            f(l, n) = (f(l, n) + dummy1*f(l, n + 1))*dummy2
-        end do
-        !$omp end target teams distribute parallel do
-
-
-    end do
-    
 #endif
 
 ! -----------------------------------------------------------------------
@@ -512,52 +486,18 @@ call SYSTEM_CLOCK(clock_0,clock_cycle)
 #endif
     end do
 999 continue
-!$omp end parallel
-
-    ! Reordering things for offloading on the GPU
-    ! Forward sweep
-    ! do l = 1, len
-    !     f(l, 1) = f(l, 1)*b(1)
-    !     wrk(l)  = 0.0_wp
-    !     do n = 2, nmax - 1
-    !         f(l, n) = f(l, n)*b(n) + a(n)*f(l, n - 1)
-    !         wrk(l) = wrk(l) + d(n)*f(l, n)
-    !     end do
-    !     wrk(l) = wrk(l) + d(1)*f(l, 1)        
-    !     ! do n = 1, nmax - 1
-    !     !     wrk(l) = wrk(l) + d(n)*f(l, n)
-    !     ! end do
-    !     f(l, nmax) = (f(l, nmax) - wrk(l))*b(nmax)
-    !     ! Backward sweep
-    !     f(l, nmax - 1) = e(nmax - 1)*f(l, nmax) + f(l, nmax - 1)
-    !     do n = nmax - 2, 1, -1
-    !         f(l, n) = f(l, n) + c(n)*f(l, n + 1) + e(n)*f(l, nmax)
-    !     end do
-    ! end do
-
-! -----------------------------------------------------------------------
-! With APU ACCELERATION 
-! -----------------------------------------------------------------------
+!! $omp end parallel
 
 #else
+! -----------------------------------------------------------------------
+! With APU ACCELERATION 
+! Reordering things for offloading on the GPU
+! -----------------------------------------------------------------------
     !$omp target teams distribute parallel do default(none) &
     !$omp private(l) &
     !$omp shared(f,wrk,a,b,c,d,e,f,len,nmax,n)
     do l = 1, len
-        ! f(l, 1) = f(l, 1)*b(1)
-        ! wrk(l)  = 0.0_wp
-        ! do n = 2, nmax - 1
-        !     f(l, n) = f(l, n)*b(n) + a(n)*f(l, n - 1)
-        ! end do
-        ! do n = 1, nmax - 1
-        !     wrk(l) = wrk(l) + d(n)*f(l, n)
-        ! end do
-        ! f(l, nmax) = (f(l, nmax) - wrk(l))*b(nmax)
-        ! ! Backward sweep
-        ! f(l, nmax - 1) = e(nmax - 1)*f(l, nmax) + f(l, nmax - 1)
-        ! do n = nmax - 2, 1, -1
-        !     f(l, n) = f(l, n) + c(n)*f(l, n + 1) + e(n)*f(l, nmax)
-        ! end do
+        ! Foreward sweep
         f(l, 1) = f(l, 1)*b(1)
         wrk(l)  = 0.0_wp
         do n = 2, nmax - 1
@@ -565,7 +505,7 @@ call SYSTEM_CLOCK(clock_0,clock_cycle)
             wrk(l) = wrk(l) + d(n)*f(l, n)
         end do
         wrk(l) = wrk(l) + d(1)*f(l, 1)        
-        ! do n = 1, nmax - 1
+        ! do n = 1, nmax - 1 ! this is recombined upwards
         !     wrk(l) = wrk(l) + d(n)*f(l, n)
         ! end do
         f(l, nmax) = (f(l, nmax) - wrk(l))*b(nmax)
