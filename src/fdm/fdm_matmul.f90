@@ -172,26 +172,29 @@ contains
 
         ! -------------------------------------------------------------------
         ! Interior points; accelerate
-        do n = 4, nx - 3
-            !!$omp target teams distribute parallel do default(none) &
-            !!$omp private(l) &
-            !!$omp shared(n,len,f,u,r1,r3)
-            do l = 1, len
-                f(l, n) = u(l, n - 1)*r1(n) + u(l, n) + u(l, n + 1)*r3(n)
+        if (  nx*len < 2e9 ) then 
+            ! max omp integer length 2,147,483,647=2**31-1 (32 bit integer)
+            ! !$omp target teams distribute parallel do collapse(2) default(none) &
+            ! !$omp private(n,l) &
+            ! !$omp shared(nx,len,f,u,r1,r3)
+            do n = 4, nx - 3
+                do l = 1, len
+                    f(l, n) = u(l, n - 1)*r1(n) + u(l, n) + u(l, n + 1)*r3(n)
+                end do
             end do
-           !!$omp end target teams distribute parallel do
-        end do
-
-
-        ! !!$omp target teams distribute parallel do collapse(2) default(none) &
-        ! !!$omp private(n,l) &
-        ! !!$omp shared(nx,len,f,u,r1,r3)
-        ! do n = 4, nx - 3
-        !     do l = 1, len
-        !         f(l, n) = u(l, n - 1)*r1(n) + u(l, n) + u(l, n + 1)*r3(n)
-        !     end do
-        ! end do
-        ! !!$omp end target teams distribute parallel do
+            ! !$omp end target teams distribute parallel do
+        else
+            ! don't use collapse statement 
+            ! !$omp target teams distribute parallel do default(none) &
+            ! !$omp private(n,l) &
+            ! !$omp shared(nx,len,f,u,r1,r3)
+            do n = 4, nx - 3
+                do l = 1, len
+                    f(l, n) = u(l, n - 1)*r1(n) + u(l, n) + u(l, n + 1)*r3(n)
+                end do
+            end do
+            ! !$omp end target teams distribute parallel do
+        end if
 
         ! -------------------------------------------------------------------
         ! Boundary; the last 3/2+1+1=3 rows might be different
@@ -885,8 +888,6 @@ contains
         ! -----------------------------------------------------------------------
         call SYSTEM_CLOCK(clock_0,clock_cycle) 
         
-! #ifndef USE_APU
-
         ! Boundary
         if (periodic) then
             f(:, 1) = r3_loc*u(:, 1) + u(:, 2) + u(:, nx) &
@@ -929,101 +930,6 @@ contains
             if (any([BCS_DN, BCS_NN] == ibc_loc)) f(:, nx) = 0.0_wp
 
         end if
-
-        ! -----------------------------------------------------------------------
-        ! With APU ACCELERATION 
-        ! not possible to use rx_b preprocessors here!
-        ! -----------------------------------------------------------------------
-! #else
-        
-!         ! Boundary
-!         if (periodic) then
-!             !$omp target teams distribute parallel do default(none) &
-!             !$omp private(l) &
-!             !$omp shared(len,f,nx,u,r3_loc,r5_loc)
-!             do l = 1, len
-!                 f(l, 1) = r3_loc*u(l, 1) + u(l, 2) + u(l, nx) &
-!                         + r5_loc*(u(l, 3) + u(l, nx - 1))
-
-!                 f(l, 2) = r3_loc*u(l, 2) + u(l, 3) + u(l, 1) &
-!                         + r5_loc*(u(l, 4) + u(l, nx))
-!             end do
-!             !$omp end target teams distribute parallel do
-
-!         else
-!             !$omp target teams distribute parallel do default(none) &
-!             !$omp private(l) &
-!             !$omp shared(len,f,u,r1,r2,r3,r4,r5)
-!             do l = 1, len
-!                 f(l, 1) = u(l, 1)*r3(1) + u(l, 2)*r4(1) + u(l, 3)*r5(1) &
-!                         + u(l, 4)*r1(1)   ! r1(1) contains 3. superdiagonal to allow for longer stencil at boundary
-
-!                 f(l, 2) = u(l, 1)*r2(2) + u(l, 2)*r3(2) + u(l, 3)*r4(2) + u(l, 4)*r5(2)
-!             end do
-!             !$omp end target teams distribute parallel do
-
-!             if (any([BCS_ND, BCS_NN] == ibc_loc)) then
-!                 !$omp target teams distribute parallel do default(none) &
-!                 !$omp private(l) &
-!                 !$omp shared(len,f)
-!                 do l = 1, len
-!                     f(l, 1) = 0.0_wp
-!                 end do
-!                 !$omp end target teams distribute parallel do
-!             end if
-!         end if
-
-!         ! Interior points
-!         !$omp target teams distribute parallel do collapse(2) default(none) &
-!         !$omp private(n,l) &
-!         !$omp shared(len,f,u,nx,r3_loc,r5_loc)
-!         do n = 3, nx - 2
-!             do l = 1, len
-!                 f(l, n) = r3_loc*u(l, n) + u(l, n + 1) + u(l, n - 1) &
-!                         + r5_loc*(u(l, n + 2) + u(l, n - 2))
-!             end do
-!         end do
-!         !$omp end target teams distribute parallel do
-
-!         ! Boundary
-!         if (periodic) then
-!             !$omp target teams distribute parallel do default(none) &
-!             !$omp private(l) &
-!             !$omp shared(len,f,u,nx,r3_loc,r5_loc)
-!             do l = 1, len
-!                 f(l, nx - 1) = r3_loc*u(l, nx - 1) + u(l, nx) + u(l, nx - 2) &
-!                              + r5_loc*(u(l, 1) + u(l, nx - 3))
-
-!                 f(l, nx) = r3_loc*u(l, nx) + u(l, 1) + u(l, nx - 1) &
-!                          + r5_loc*(u(l, 2) + u(l, nx - 2))
-!             end do
-!             !$omp end target teams distribute parallel do
-
-!         else
-!             !$omp target teams distribute parallel do default(none) &
-!             !$omp private(l) &
-!             !$omp shared(len,f,u,nx,r1,r2,r3,r4,r5)
-!             do l = 1, len
-!                 f(l, nx - 1) = u(l, nx - 3)*r1(nx - 1) + u(l, nx - 2)*r2(nx - 1) + u(l, nx - 1)*r3(nx - 1) &
-!                              + u(l, nx)*r4(nx - 1)
-
-!                 f(l, nx) = u(l, nx - 3)*r5(nx) & ! r5(nx) contains 3. subdiagonal to allow for longer stencil at boundary
-!                          + u(l, nx - 2)*r1(nx) + u(l, nx - 1)*r2(nx) + u(l, nx)*r3(nx)
-!             end do
-!             !$omp end target teams distribute parallel do
-
-!             if (any([BCS_DN, BCS_NN] == ibc_loc)) then
-!                 !$omp target teams distribute parallel do default(none) &
-!                 !$omp private(l) &
-!                 !$omp shared(len,f,nx)
-!                 do l = 1, len    
-!                     f(l, nx) = 0.0_wp
-!                 end do
-!                 !$omp end target teams distribute parallel do
-!             end if
-!         end if
-! #endif
-
         ! -----------------------------------------------------------------------
         ! Profiling
         ! -----------------------------------------------------------------------
