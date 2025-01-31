@@ -294,15 +294,29 @@ contains
         !$omp end target teams distribute parallel do
         ! -------------------------------------------------------------------
         ! Interior points; accelerate
-        !$omp target teams distribute parallel do collapse(2) default(none) &
-        !$omp private(n,l) &
-        !$omp shared(len,f,u,nx,r1,r2,r3)
-        do n = 2, nx - 1
-            do l = 1, len
-                f(l, n) = f(l, n) + u(l, n - 1)*r1(n) + u(l, n)*r2(n) + u(l, n + 1)*r3(n)
+        if (  nx*len < 2e9 ) then 
+            ! max omp integer length 2,147,483,647=2**31-1 (32 bit integer)
+            !$omp target teams distribute parallel do collapse(2) default(none) &
+            !$omp private(n,l) &
+            !$omp shared(len,f,u,nx,r1,r2,r3)
+            do n = 2, nx - 1
+                do l = 1, len
+                    f(l, n) = f(l, n) + u(l, n - 1)*r1(n) + u(l, n)*r2(n) + u(l, n + 1)*r3(n)
+                end do
             end do
-        end do
-        !$omp end target teams distribute parallel do
+            !$omp end target teams distribute parallel do
+        else
+            ! don't use collapse statement 
+            !$omp target teams distribute parallel do default(none) &
+            !$omp private(n,l) &
+            !$omp shared(len,f,u,nx,r1,r2,r3)
+            do n = 2, nx - 1
+                do l = 1, len
+                    f(l, n) = f(l, n) + u(l, n - 1)*r1(n) + u(l, n)*r2(n) + u(l, n + 1)*r3(n)
+                end do
+            end do
+            !$omp end target teams distribute parallel do
+        end if
 
         ! -------------------------------------------------------------------
         ! Boundary
@@ -750,15 +764,29 @@ contains
         end if
 
         ! Interior points
-        !$omp target teams distribute parallel do collapse(2) default(none) &
-        !$omp private(n,l) &
-        !$omp shared(len,f,u,nx,r5_loc)
-        do n = 4, nx - 3
-            do l = 1, len
-                f(l, n) = u(l, n + 1) - u(l, n - 1) + r5_loc*(u(l, n + 2) - u(l, n - 2))
+        if (  nx*len < 2e9 ) then 
+            ! max omp integer length 2,147,483,647=2**31-1 (32 bit integer)
+            !$omp target teams distribute parallel do collapse(2) default(none) &
+            !$omp private(n,l) &
+            !$omp shared(len,f,u,nx,r5_loc)
+            do n = 4, nx - 3
+                do l = 1, len
+                    f(l, n) = u(l, n + 1) - u(l, n - 1) + r5_loc*(u(l, n + 2) - u(l, n - 2))
+                end do
             end do
-        end do
-        !$omp end target teams distribute parallel do
+            !$omp end target teams distribute parallel do
+        else 
+            ! don't use collapse!
+            !$omp target teams distribute parallel do default(none) &
+            !$omp private(n,l) &
+            !$omp shared(len,f,u,nx,r5_loc)
+            do n = 4, nx - 3
+                do l = 1, len
+                    f(l, n) = u(l, n + 1) - u(l, n - 1) + r5_loc*(u(l, n + 2) - u(l, n - 2))
+                end do
+            end do
+            !$omp end target teams distribute parallel do
+        end if 
 
         ! Boundary
         if (periodic) then
