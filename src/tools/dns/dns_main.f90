@@ -47,9 +47,9 @@ program DNS
     use Avg_Spatial, only: IO_READ_AVG_SPATIAL, IO_WRITE_AVG_SPATIAL
     implicit none
     save
- #ifdef USE_APU   
+    ! for APUs!
     !$omp requires unified_shared_memory
- #endif
+
     ! -------------------------------------------------------------------
     character(len=32) fname, str
     integer ig
