@@ -16,13 +16,13 @@ if ( NOT PROFILE )
 endif()
 
 if (${PROFILE} STREQUAL "TRUE" )  
-   set(USER_profile_FLAGS "-g -h profile_generate")
+   set(USER_profile_FLAGS "-g")# not needed -h profile_generate")
 endif()
 
 if ( NOT ACCELERATE )
   set(ACCELERATE "FALSE")
 elseif( ${ACCELERATE} STREQUAL "TRUE" )
-  set(USER_APU_FLAGS "-fopenmp -L/opt/rh/gcc-toolset-12/root/usr/lib/gcc/x86_64-redhat-linux/12")
+  set(USER_APU_FLAGS "-fopenmp")# on AAC&: -L/opt/rh/gcc-toolset-12/root/usr/lib/gcc/x86_64-redhat-linux/12")
   add_definitions(-DUSE_APU)
 endif() 
  
