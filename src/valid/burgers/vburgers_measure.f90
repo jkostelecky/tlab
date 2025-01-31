@@ -20,7 +20,7 @@
    use OPR_BURGERS
    use OPR_FILTERS
    use TLab_Background, only: TLab_Initialize_Background
-   use FDM, only : g, FDM_Initialize
+   use FDM, only: g, FDM_Initialize
    use OPR_ELLIPTIC
    use OPR_FOURIER
    ! use BOUNDARY_BCS
@@ -144,7 +144,7 @@
    call output_sum(c, 'OPR_PAR_X')
    if (ims_pro == 0) write (*, *) '------------------- '
 
-   call OPR_BURGERS_X(OPR_B_SELF, 0, imax, jmax, kmax, bcs, g(1), a, a, c, tmp1)
+   call OPR_BURGERS_X(OPR_B_SELF, 0, imax, jmax, kmax, bcs, a, a, c, tmp1)
    call output_sum(c, 'OPR_BUR_X')
    call output_sum(tmp1, 'OPR_BUR_X')
    if (ims_pro == 0) write (*, *) '------------------- '
@@ -154,7 +154,7 @@
    call output_sum(c, 'OPR_PAR_Y')
    if (ims_pro == 0) write (*, *) '------------------- '
    
-   call OPR_BURGERS_Y(OPR_B_SELF, 0, imax, jmax, kmax, bcs, g(2), a, a, c, tmp1)
+   call OPR_BURGERS_Y(OPR_B_SELF, 0, imax, jmax, kmax, bcs, a, a, c, tmp1)
    call output_sum(c, 'OPR_BUR_Y')
    call output_sum(tmp1, 'OPR_BUR_Y')
    if (ims_pro == 0) write (*, *) '------------------- '
@@ -164,7 +164,7 @@
    call output_sum(c, 'OPR_PAR_Z')
    if (ims_pro == 0) write (*, *) '------------------- '
    
-   call OPR_BURGERS_Z(OPR_B_SELF, 0, imax, jmax, kmax, bcs, g(3), a, a, c, tmp1)
+   call OPR_BURGERS_Z(OPR_B_SELF, 0, imax, jmax, kmax, bcs, a, a, c, tmp1)
    call output_sum(c, 'OPR_BUR_Z')
    call output_sum(tmp1, 'OPR_BUR_Z')
    if (ims_pro == 0) write (*, *) '------------------- '
@@ -203,7 +203,7 @@
          end do
       end do
 
-      call OPR_BURGERS_X(OPR_B_SELF, 0, imax, jmax, kmax, bcs, g(1), a, a, c, tmp1)
+      call OPR_BURGERS_X(OPR_B_SELF, 0, imax, jmax, kmax, bcs, a, a, c, tmp1)
       call OPR_PARTIAL_Y(OPR_P2_P1, imax, jmax, kmax, bcs, g(2), a, b, c)
       CALL SYSTEM_CLOCK(clock_add0) 
       !$omp target teams distribute parallel do collapse(3) default (none) &
@@ -219,7 +219,7 @@
       !$omp end target teams distribute parallel do
       CALL SYSTEM_CLOCK(clock_add1)
       add_time = add_time + real(clock_add1 - clock_add0) / clock_cycle 
-      call OPR_BURGERS_Y(OPR_B_SELF, 0, imax, jmax, kmax, bcs, g(2), a, a, c, tmp1)
+      call OPR_BURGERS_Y(OPR_B_SELF, 0, imax, jmax, kmax, bcs, a, a, c, tmp1)
 
       ! ###################################################################
       if (g(3)%size > 1) then
@@ -237,7 +237,7 @@
          !$omp end target teams distribute parallel do
          CALL SYSTEM_CLOCK(clock_add1)
          add_time = add_time + real(clock_add1 - clock_add0) / clock_cycle 
-         call OPR_BURGERS_Z(OPR_B_SELF, 0, imax, jmax, kmax, bcs, g(3), a, a, c, tmp1)
+         call OPR_BURGERS_Z(OPR_B_SELF, 0, imax, jmax, kmax, bcs, a, a, c, tmp1)
 
          ! ------------------------------------------
          
