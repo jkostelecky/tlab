@@ -164,7 +164,7 @@ subroutine TRIDSS(nmax, len, a, b, c, f)
 ! -----------------------------------------------------------------------
     !$omp target teams distribute parallel do default(none) &
     !$omp private(l) &
-    !$omp shared(f,wrk,a,b,c,len,nmax,n)
+    !$omp shared(f,a,b,c,len,nmax,n)
     do l = 1, len
         ! Forward sweep
         do n = 2, nmax
